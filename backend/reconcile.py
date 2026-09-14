@@ -274,9 +274,9 @@ def interchangeable(options):
     Candidates already share an amount. If they also share an account and a
     date then they are the same money in the same place on the same day, and
     every way of pairing them off gives the same totals. Refusing these was
-    losing real transfers: two $25,000 payments from one account into another
+    losing real transfers: two identical payments from one account into another
     on one day made each leg look ambiguous, so both pairs were dropped and
-    the $50,000 was counted as income and as spending at the same time.
+    the money was counted as income and as spending at the same time.
     """
     first = options[0]
     return all(o["account_id"] == first["account_id"] and o["date"] == first["date"]

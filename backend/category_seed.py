@@ -44,8 +44,8 @@ SEED = [
     ("Parking", r"ONSTREET PARKING|WILSON PARKING|SECURE PARKING|CARE PARK"),
 
     # ---- home ----
-    # Rent is rent. The UniLodge card taps are $4-$5 laundry and amenity
-    # charges: 97 of them sat in Rent and dragged its average down to $119.
+    # Rent is rent. The UniLodge card taps are small laundry and amenity
+    # charges: 97 of them sat in Rent and dragged its average far below any real rent.
     ("Rent", r"ACQUIRE REAL ESTATE"),
     ("Laundry and amenities", r"UNILODGE|RESIDENT APP"),
     ("Phone and internet", r"VODAFONE|BOOST PREPAID|TELSTRA|OPTUS|AMAYSIM|BELONG"),
@@ -90,7 +90,7 @@ SEED = [
     # description, so matching it labelled 123 real purchases as bank fees.
     # "INCL OVERSEAS TRANSACTION FEE $5.67" is the same trap on the other side:
     # ANZ prints it inside a whole overseas ATM withdrawal, so matching it moved
-    # $298.66 of Bali cash out of Cash withdrawals and into fees.
+    # whole withdrawals out of Cash withdrawals and into fees.
     ("Bank fees", r"ATM TRANSACTION FEE|ACCOUNT SERVICE FEE"
                   r"|MONTHLY ACCOUNT FEE|DISHONOUR FEE"),
     # Withheld from interest income. It is a tax, not a bank's charge.

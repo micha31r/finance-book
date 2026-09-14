@@ -1,1 +1,6 @@
 pymupdf>=1.24
+
+# The analysis agent. Optional: everything else works without it. It drives the
+# `claude` CLI you already have, so it uses your Claude subscription rather than
+# an API key.
+claude-agent-sdk>=0.2

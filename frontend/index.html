@@ -33,13 +33,19 @@
     --in: #b5abfc;          /* light blurple: money in, positive */
     --out: #eae8f2;         /* money out stays plain ink, as 1a has it */
     --move: #9397ab;        /* transfers stay desaturated */
+    --gain: #57d68d;        /* income, in the transaction tables */
+    --loss: #f2727d;        /* spending, in the transaction tables */
     --accent: #9184d9;      /* blurple: current item, primary action */
     --accent-dim: #423a6a;
+    --gap: 14px;           /* one spacing step, horizontal and vertical */
     --display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
     --sans: "IBM Plex Sans", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   * { box-sizing: border-box; }
+  /* Every tick and radio in the app, so none of them falls back to the
+     browser's blue against a purple theme. */
+  input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
     font: 14px/1.55 var(--sans);
@@ -58,12 +64,13 @@
   @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
 
   /* ---------- sidebar ---------- */
-  /* Full viewport height so the dividing rule reaches the bottom of the
-     window rather than stopping under the last item. Scrolls on its own if the
+  /* Fills the window below the chat bar, so the dividing rule reaches the
+     bottom rather than stopping under the last item. Scrolls on its own if the
      account list ever outgrows the screen. */
   nav {
     padding: 18px 12px; border-right: 1px solid var(--line);
-    position: sticky; top: 0; height: 100vh; overflow-y: auto; box-sizing: border-box;
+    position: sticky; top: var(--bar); height: calc(100vh - var(--bar));
+    overflow-y: auto; box-sizing: border-box;
     /* Column flex so the export stamp can sit on the bottom edge. As a page
        footer it spanned the full width and pushed the document taller than the
        window, which is what made the whole page scroll. */
@@ -91,7 +98,8 @@
   .title h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
   .title .sub { color: var(--ink-dim); font-size: 13px; }
 
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 16px 0; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+           gap: var(--gap); margin: var(--gap) 0; }
   /* Surface block with a 2px rule down the left, lime on the first card and
      dim on the rest, exactly as the 1c dashboard fragment does it. */
   .card { background: var(--panel); border-left: 2px solid var(--accent-dim); padding: 13px 16px; }
@@ -102,16 +110,16 @@
   .card .note { font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
 
   .panel { background: var(--panel); border: 1px solid var(--line); padding: 14px 16px;
-           margin-bottom: 14px; min-width: 0; }
+           margin-bottom: var(--gap); min-width: 0; }
   .panel > h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; }
   .panel > p  { margin: 0 0 12px; font-size: 12px; color: var(--ink-faint); }
-  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
   .charts > * { min-width: 0; }
   @media (max-width: 1040px) { .charts { grid-template-columns: 1fr; } }
   .chartbox { position: relative; height: 240px; min-width: 0; }
   .chartbox canvas { display: block; max-width: 100%; }
 
-  .years { display: flex; gap: 6px; flex-wrap: wrap; margin: 18px 0 10px; }
+  .years { display: flex; gap: 6px; flex-wrap: wrap; margin: var(--gap) 0; }
   .years button {
     border: 1px solid var(--line); background: transparent; color: var(--ink-dim);
     padding: 5px 12px; font: inherit; font-family: var(--mono); font-size: 12px; cursor: pointer;
@@ -211,11 +219,20 @@
   .tag.in { --tag: var(--in); }
   .tag.out { --tag: var(--out); }
   .tag.move { --tag: var(--move); }
+  /* In the transaction tables money reads the way a bank statement does:
+     income green, spending red, transfers left grey because they are neither.
+     The amount, the type badge and the in/out figures in the header strip all
+     agree. The rest of the app, cards and charts included, keeps its purple. */
+  table.rows td.amt.in, .tcap .meta .in { color: var(--gain); }
+  table.rows td.amt.out, .tcap .meta .out { color: var(--loss); }
+  table.rows .tag.in { --tag: var(--gain); }
+  table.rows .tag.out { --tag: var(--loss); }
   /* A provisional row is one the bank has not finalised. Dimming it says so
      without spending a column on the word. The reason is in the title. */
   tr.provisional td.desc, tr.provisional td.date { color: var(--ink-faint); font-style: italic; }
   .empty { padding: 28px 10px; text-align: center; color: var(--ink-faint); }
-  .controls { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 14px; }
+  .controls { display: flex; gap: var(--gap); flex-wrap: wrap; align-items: flex-start;
+              margin-bottom: var(--gap); }
   .controls > div { min-width: 0; }
   .picker { display: flex; flex-wrap: wrap; gap: 6px; }
   .picker label {
@@ -227,7 +244,23 @@
   .picker input { accent-color: var(--accent); margin: 0; }
   .swatch { width: 9px; height: 9px; border-radius: 0; display: inline-block; flex: none; }
   tbody tr.pick { cursor: pointer; }
-  tbody tr.pick:hover td:first-child { text-decoration: underline; text-underline-offset: 3px; }
+  /* The name is the part you click to drill in, so only it gets the underline —
+     the tick box beside it does something else. */
+  tbody tr.pick:hover td:nth-child(2) { text-decoration: underline; text-underline-offset: 3px; }
+  td.tick, th.tick { width: 2.2rem; padding-right: 0; }
+  td.tick input, th.tick input { margin: 0; display: block; cursor: pointer; }
+  /* A category left out of the totals. Still listed, still clickable, just not
+     counted — dimmed rather than hidden so you can put it back. */
+  tr.off td { opacity: .42; }
+  tr.off td.tick { opacity: 1; }
+
+  .chip {
+    font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+    padding: 4px 9px; cursor: pointer; border-radius: 0;
+    border: 1px solid var(--line); background: transparent; color: var(--ink-dim);
+  }
+  .chip:hover { color: var(--ink); border-color: var(--ink-faint); }
+  .chip[aria-current="true"] { background: var(--accent); color: #f3f5fe; border-color: var(--accent); }
   /* The category drill-down covers the whole window. The page underneath stays
      rendered, so closing is instant and the scroll position survives. */
   #drill {
@@ -253,7 +286,7 @@
   .bar { height: 6px; background: var(--line-soft); overflow: hidden; }
   .bar > i { display: block; height: 100%; }
   .hint { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--move);
-          border-radius: 0; padding: 12px 16px; margin-bottom: 14px; font-size: 13px; }
+          border-radius: 0; padding: 12px 16px; margin-bottom: var(--gap); font-size: 13px; }
   .hint b { font-variant-numeric: tabular-nums; }
   form.holding { display: grid; grid-template-columns: 2fr 1.4fr 1fr 1fr auto; gap: 8px; align-items: end; }
   @media (max-width: 900px) { form.holding { grid-template-columns: 1fr 1fr; } }
@@ -279,9 +312,221 @@
     color: var(--ink-faint); font-size: 11px; line-height: 1.5;
   }
   nav .foot div + div { margin-top: 2px; }
+
+  /* ---------- the agent ---------- */
+  /* Fixed to the top on every view and every width, so you can always just
+     type. It keeps a one-line slot in the layout; the answers open downwards
+     over the page rather than pushing it, and clicking the page puts them away.
+     --bar is that one-line height, and the layout below is offset by it. */
+  :root {
+    --bar: 38px;
+    /* The one place in the app that is not the purple palette. It marks the
+       surface where you are talking to a model rather than reading your own
+       books, and it only appears while that surface has your attention. */
+    --spectrum: linear-gradient(90deg, #b5abfc, #7cc7fb, #5eead4,
+                                #fbbf24, #f472b6, #a78bfa, #b5abfc);
+  }
+  #agent {
+    position: fixed; inset: 0 0 auto 0; z-index: 40;
+    background: var(--bg); border-bottom: 1px solid var(--line);
+    display: flex; flex-direction: column; max-height: 100vh;
+    /* The whole chat is monospace, like the terminal its markdown copies.
+       13px, a pixel under the page's text, because mono glyphs run wider and
+       taller and would otherwise look a size up. Everything inside inherits. */
+    font: 13px/1.55 var(--mono);
+  }
+  /* Buttons and text fields do not inherit fonts by default, so they have to be
+     told — including Apply and Dismiss on a proposed change. */
+  #agent button, #agent textarea { font-family: var(--mono); }
+  body { padding-top: var(--bar); }
+
+  /* Two layers of the same gradient: a hairline on the edge, and a blurred
+     copy below it doing the glowing. Both absolutely positioned, so neither
+     becomes a flex item of the bar. */
+  #agent::before, #agent::after {
+    content: ""; position: absolute; left: 0; right: 0; pointer-events: none;
+    background: var(--spectrum); background-size: 200% 100%;
+    opacity: 0; transition: opacity .3s ease;
+  }
+  /* Exactly over the 1px border, not on top of it: bottom:-1px puts this in the
+     border's own band (a containing block is its padding box), so the edge is
+     the same weight focused or not, just a different colour. */
+  #agent::after  { bottom: -1px; height: 1px; }
+  /* Hung off the bottom edge (top:100%) and clipped flat along its own top, so
+     the blur can only spread downwards. Left to itself a 10px blur reaches just
+     as far upwards, and washes over the text you are typing. The three negative
+     insets leave the other sides free to stay soft. */
+  #agent::before {
+    top: 100%; height: 10px; filter: blur(12px);
+    clip-path: inset(0 -40px -40px -40px);
+  }
+  #agent:focus-within::after  { opacity: 1; }
+  #agent:focus-within::before { opacity: .55; }
+  @media (prefers-reduced-motion: no-preference) {
+    #agent:focus-within::before, #agent:focus-within::after {
+      animation: spectrum-drift 9s linear infinite;
+    }
+  }
+  @keyframes spectrum-drift { to { background-position: -200% 0; } }
+
+
+  /* Answers sit above the input, so the thing you are reading does not jump
+     when the box grows under it. */
+  #agentLog {
+    overflow-y: auto; padding: 0 12px; display: none;
+    border-bottom: 1px solid var(--line-soft);
+    /* A scroll that reaches the end of the log stops there, rather than
+       running on into the page behind. */
+    overscroll-behavior: contain;
+  }
+  /* Half the screen at most: the log opens over the page, and the page is what
+     you are asking about. */
+  #agent.open #agentLog { display: block; padding: 12px; max-height: 50vh; }
+  /* Full screen: the same chat given the whole window, conversation above and
+     the input along the bottom. It comes after the 50vh cap on purpose, so it
+     wins at equal specificity. The z-index clears the drill-down overlay. */
+  #agent.full { inset: 0; max-height: none; z-index: 100; }
+  #agent.full #agentLog { flex: 1; min-height: 0; max-height: none; }
+
+  /* Floats over the top right of the conversation, where the spinner used to
+     be, so text runs underneath instead of wrapping round it. Only shown while
+     there is a conversation to make bigger. */
+  #agentFull {
+    position: absolute; top: 8px; right: 12px; z-index: 2; display: none;
+    width: 24px; height: 24px; padding: 0; align-items: center; justify-content: center;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink-dim);
+    border-radius: 0; cursor: pointer;
+  }
+  #agentFull:hover { color: var(--ink); border-color: var(--ink-faint); }
+  #agent.open #agentFull { display: flex; }
+  #agentFull .shrink, #agent.full #agentFull .grow { display: none; }
+  #agent.full #agentFull .shrink { display: block; }
+  #agentForm { display: flex; gap: 10px; align-items: flex-end; padding: 0 12px;
+               min-height: var(--bar); }
+  #agentInput {
+    flex: 1; min-width: 0; resize: none; overflow-y: auto;
+    max-height: 40vh; padding: calc((var(--bar) - 1.45em) / 2) 0;
+    border: 0; background: none; overscroll-behavior: contain;
+    color: var(--ink); font: inherit; line-height: 1.45;
+    caret-color: var(--in);
+  }
+  #agentInput:focus { outline: none; }
+  #agentInput::placeholder { color: var(--ink-faint); }
+  #agent:focus-within #agentInput::placeholder { color: var(--ink-dim); }
+  /* The right-hand controls: a cluster exactly one row tall, riding the bottom
+     of the form. The input pads its text into the middle of that same row, so
+     whatever is centred here sits level with the last line of text, and stays
+     level as the box grows. There are no per-button margins to keep in step —
+     those had Send 2px from the top of the row and 6px from the bottom. */
+  :root { --control: 22px; }
+  .agent-controls { flex: none; display: flex; align-items: center; gap: 6px;
+                    height: var(--bar); }
+  /* Scoped to the whole chat and carrying an ID, on purpose. The buttons set
+     display through #agentSend and #agentStop, and an ID selector outranks a
+     plain [hidden] rule. So for a while Stop stayed on screen with nothing
+     running, and Send showed on an empty box, with hidden set on both. */
+  #agent [hidden] { display: none; }
+  #agentSpin { font: 14px/1 var(--mono); color: var(--ink-dim); width: 1.2ch;
+               text-align: center; }
+  #agentSpin::after { content: "⠋"; animation: braille .9s steps(1) infinite; }
+  @keyframes braille {
+    0%  { content: "⠋" }  10% { content: "⠙" }  20% { content: "⠹" }
+    30% { content: "⠸" }  40% { content: "⠼" }  50% { content: "⠴" }
+    60% { content: "⠦" }  70% { content: "⠧" }  80% { content: "⠇" }
+    90% { content: "⠏" }
+  }
+  #agentSend, #agentStop {
+    height: var(--control); padding: 0 8px; border-radius: 0; cursor: pointer;
+    display: inline-flex; align-items: center; font: 12px/1 var(--mono);
+  }
+  #agentSend { border: 1px solid var(--accent); background: var(--accent); color: #f3f5fe; }
+  #agentStop { border: 1px solid var(--line); background: none; color: var(--ink-dim); }
+  #agentStop:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+  /* One rhythm for the whole conversation: 18px between turns, 8px between the
+     parts of a turn, and 2px between the agent's working steps so they read as
+     a single block. Your messages carry the accent colour and a rule down the
+     left, so where one turn ends and the next begins is visible at a glance. */
+  .turn + .turn { margin-top: 18px; }
+  .turn .you {
+    color: var(--in); border-left: 2px solid var(--accent);
+    padding: 1px 0 1px 10px; white-space: pre-wrap; line-height: 1.5;
+  }
+  .turn .you.queued { color: var(--ink-faint); border-left-color: var(--line); }
+  .tag-queued { font: 11px var(--mono); margin-left: 8px; color: var(--ink-faint); }
+  .turn .steps:not(:empty) { margin-top: 8px; display: grid; gap: 2px; }
+  .turn .said:not(:empty) { margin-top: 8px; line-height: 1.55; }
+  /* Markdown the way a terminal draws it: one text size for everything, with
+     structure carried by weight, colour and indentation instead of bigger
+     headings with margins of their own. Every block, whatever kind, is
+     separated by the same 8px. Code is the same size as the text
+     around it, since the whole chat is set in mono. */
+  .said > * { margin: 0; }
+  .said > * + * { margin-top: 8px; }
+  .said strong { color: var(--ink); font-weight: 600; }
+  .said em { font-style: italic; }
+  .said a { color: var(--in); }
+  .said code { font: 13px var(--mono); color: var(--ink); background: var(--panel);
+               padding: 0 4px; }
+  .said .md-h { font-weight: 600; color: var(--in); }
+  .said .md-list { display: grid; gap: 2px; }
+  .said .md-li { display: flex; gap: 8px; padding-left: calc(var(--level, 0) * 18px); }
+  .said .md-mark { flex: none; min-width: 1.4ch; color: var(--ink-faint); }
+  .said .md-quote { border-left: 2px solid var(--line); padding-left: 10px; color: var(--ink-dim); }
+  .said .md-hr { border: 0; border-top: 1px solid var(--line); }
+  .said .md-code { font: 13px/1.5 var(--mono); color: var(--ink-dim); background: var(--panel);
+                   border: 1px solid var(--line); padding: 8px 10px; overflow-x: auto;
+                   white-space: pre; }
+  /* Tables inherit the ledger's rules unless told otherwise: full width, sticky
+     uppercase headers, hover fills. None of that belongs in a chat reply. */
+  .said .md-table { overflow-x: auto; }
+  .said table { width: auto; border-collapse: collapse; }
+  .said th, .said td { position: static; padding: 3px 16px 3px 0; background: none;
+                       font: inherit; text-transform: none; letter-spacing: normal;
+                       white-space: nowrap; font-variant-numeric: tabular-nums;
+                       border-bottom: 1px solid var(--line-soft); }
+  .said th { color: var(--ink-faint); font-weight: 500; border-bottom-color: var(--line); }
+  .said th:last-child, .said td:last-child { padding-right: 0; }
+  .said tbody tr:hover td { background: none; }
+  .work > summary { color: var(--ink-faint); cursor: pointer; list-style: none;
+                    font: 12px var(--mono); }
+  .work > summary::-webkit-details-marker { display: none; }
+  .work > summary:hover { color: var(--ink-dim); }
+  .work pre { margin: 6px 0 2px; padding: 8px 10px; overflow-x: auto;
+              background: var(--panel); border: 1px solid var(--line);
+              font: 11px/1.5 var(--mono); color: var(--ink-dim); }
+  .step { color: var(--ink-faint); font: 12px var(--mono); }
+  .propose { border: 1px solid var(--accent-dim); border-left: 3px solid var(--accent);
+             background: var(--panel); padding: 10px 12px; margin-top: 8px; }
+  .propose h4 { margin: 0 0 4px; font-size: 13px; font-weight: 500; }
+  .propose p { margin: 0 0 8px; font-size: 12px; color: var(--ink-dim); }
+  .propose .btn { margin-right: 6px; }
+  .agent-err, .agent-note { margin-top: 8px; }
+  .agent-err { color: var(--in); font-size: 13px; }
+  .agent-note { color: var(--ink-faint); font: 12px var(--mono); }
 </style>
 </head>
 <body>
+<div id="agent">
+  <button id="agentFull" type="button" aria-label="Full screen" aria-pressed="false" title="Full screen">
+    <svg class="grow" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none"
+         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10 2h4v4M14 2 9 7M6 14H2v-4M2 14l5-5"/></svg>
+    <svg class="shrink" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none"
+         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 7H9V3M9 7l5-5M3 9h4v4M7 9l-5 5"/></svg>
+  </button>
+  <div id="agentLog"></div>
+  <form id="agentForm">
+    <textarea id="agentInput" rows="1" placeholder="Ask about your money…"
+              aria-label="Ask the analysis agent"></textarea>
+    <div class="agent-controls">
+      <span id="agentSpin" aria-hidden="true" hidden></span>
+      <button id="agentStop" type="button" hidden>Stop</button>
+      <button id="agentSend" type="submit" hidden>Send</button>
+    </div>
+  </form>
+</div>
 <div class="layout">
   <nav id="sidebar"></nav>
   <main>
@@ -486,7 +731,7 @@ function renderSummary() {
   const view = accountsInView();
   // state.year, not null. The cards used to be all-time while the charts and
   // tables beside them obeyed the year buttons, so the page opened with 2026
-  // lit up and cards showing four years: $477,801 in against a real $67,906.
+  // lit up and cards showing four years of totals, about seven times too high.
   const rows = rowsFor(state.account, state.year);
   const sum = totals(rows);
   const period = state.year || "all years";
@@ -538,14 +783,13 @@ function baseOptions(extra = {}) {
   const tick = css("--ink-faint");
   const mono = getComputedStyle(document.documentElement)
     .getPropertyValue("--mono").trim();
-  return Object.assign({
+  const options = Object.assign({
     responsive: true, maintainAspectRatio: false,
     font: {family: mono},
-    interaction: {mode: "index", intersect: false},
     plugins: {
       legend: {labels: {color: css("--ink-dim"), boxWidth: 10, boxHeight: 10, usePointStyle: true}},
       // Math.abs: the flow chart plots spending downwards, which is a drawing
-      // decision. Leaking it into the text showed "Out: -$3,734.31" beside a
+      // decision. Leaking it into the text showed a negative "Out" figure beside a
       // "Money out" card reading the same figure unsigned.
       tooltip: {callbacks: {label: c => `${c.dataset.label}: ${money(Math.abs(c.parsed.y))}`}},
     },
@@ -557,6 +801,15 @@ function baseOptions(extra = {}) {
           ticks: {color: tick, callback: v => compact(v), font: {family: mono, size: 11}}},
     },
   }, extra);
+
+  // Chart.js matches the pointer along one axis, and that axis defaults to "x".
+  // On a horizontal bar chart the categories run down the y axis, so the
+  // default picked whichever bar the pointer's *horizontal* position lined up
+  // with — the tooltip and the click both landed on the wrong category. Derive
+  // it from indexAxis so this cannot be got wrong again.
+  options.interaction = extra.interaction ||
+    {mode: "index", intersect: false, axis: options.indexAxis === "y" ? "y" : "x"};
+  return options;
 }
 
 function renderCharts() {
@@ -609,8 +862,8 @@ function renderCharts() {
 
   // Not "net worth": this is bank accounts only. Term deposits and investments
   // are typed in as a single current balance with no history, so they cannot be
-  // plotted. Calling this net worth put $84,293.62 under a card reading
-  // $205,318.86 on the same screen.
+  // plotted. Calling this net worth put the accounts-only total under a card
+  // showing the full net worth, on the same screen.
   document.getElementById("balTitle").textContent =
     state.account === "all" ? "In your accounts, over time" : "Balance over time";
   document.getElementById("balNote").textContent =
@@ -656,8 +909,8 @@ const SEARCH_ICON = `<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden
 </svg>`;
 
 // Everything about a row that is worth searching, in one lowercase string.
-// Commas come out so "25663" finds "-$25,663.01"; the amount goes in both
-// formatted and plain so "-25663.01" and "25663.01" both land.
+// Commas come out so "1234" finds "-$1,234.56"; the amount goes in both
+// formatted and plain so "-1234.56" and "1234.56" both land.
 const haystack = t => t._find || (t._find = [
   t.date, t.spent_on || "", t.description, t.category || "", t.type,
   money(t.amount), (t.amount / 100).toFixed(2),
@@ -747,7 +1000,7 @@ function renderTables() {
   const out = document.getElementById("tables");
   const view = accountsInView().filter(a => rowsFor(a.id, state.year).length || state.account !== "all");
   out.innerHTML = view.length
-    ? view.map(a => tableFor(a, state.year)).join('<div style="height:14px"></div>')
+    ? view.map(a => tableFor(a, state.year)).join('<div style="height:var(--gap)"></div>')
     : '<div class="tablewrap"><div class="empty">No transactions in this period</div></div>';
 }
 
@@ -886,7 +1139,7 @@ function renderHoldings(kind) {
     // turned a typo like "50000,25" into $5,000,025.00 without a word.
     const typed = String(data.balance).replace(/[$\s]/g, "");
     if (!/^-?\d{1,3}(,\d{3})*(\.\d{1,2})?$|^-?\d+(\.\d{1,2})?$/.test(typed))
-      return alert("Balance must be an amount, like 4940.38 or 4,940.38");
+      return alert("Balance must be an amount, like 1234.56 or 1,234.56");
     const dollars = Number(typed.replace(/,/g, ""));
     await save({
       kind,
@@ -922,7 +1175,50 @@ function renderHoldings(kind) {
 // ---------- spending analysis ----------
 // This view cuts across accounts rather than sitting inside one, because the
 // question "what do I spend on food" is not per account.
-const analysis = {accounts: null, from: null, to: null, category: null};
+// `hidden` holds the categories ticked OFF, not the ones ticked on. Empty means
+// everything is included, which is the default, and a category that appears
+// later — because you widened the period or added an account — starts included
+// without anyone having to remember to tick it.
+// from/to start undefined, meaning "not chosen yet", so the default period can
+// be applied once on the first render. null means deliberately all time.
+const analysis = {accounts: null, from: undefined, to: undefined,
+                  category: null, hidden: new Set()};
+
+const catOf = t => t.category || "Uncategorised";
+
+const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+                  + `-${String(d.getDate()).padStart(2, "0")}`;
+
+function monthsAgo(n) {
+  const now = new Date(), then = new Date();
+  then.setMonth(then.getMonth() - n);
+  // setMonth rolls forward when the target month is shorter — 31 March minus
+  // one month lands back in March. Pull it to the last day of the month meant.
+  if (then.getDate() !== now.getDate()) then.setDate(0);
+  return isoDay(then);
+}
+
+// Measured from today, so "6 months" means the last six months even when the
+// newest statement is a fortnight old.
+const PERIODS = [
+  {key: "30d", label: "30 days",   from: () => { const d = new Date(); d.setDate(d.getDate() - 29); return isoDay(d); }},
+  {key: "3m",  label: "3 months",  from: () => monthsAgo(3)},
+  {key: "6m",  label: "6 months",  from: () => monthsAgo(6)},
+  {key: "12m", label: "12 months", from: () => monthsAgo(12)},
+  {key: "ytd", label: "This year", from: () => `${new Date().getFullYear()}-01-01`},
+  {key: "all", label: "All time",  from: () => null},
+];
+const DEFAULT_PERIOD = "12m";
+
+const applyPeriod = key => {
+  analysis.from = PERIODS.find(p => p.key === key).from();
+  analysis.to = null;
+};
+
+// Which preset the current dates correspond to, if any. A hand-picked range
+// matches none and leaves every button unlit.
+const activePeriod = () =>
+  analysis.to ? null : (PERIODS.find(p => p.from() === analysis.from) || {}).key;
 
 // When the money actually moved, which is the question this page asks. The
 // ledger stays on the bank's posting date because that is what orders the
@@ -945,7 +1241,7 @@ function analysisRows() {
 // of it. Only with no period does the data's own span stand in.
 // Using the span of the rows regardless was overstating every average: picking
 // calendar 2026 divided by 236 days instead of 365, making "per month" read
-// $4,903.77 against a true $3,170.66.
+// about 55% higher than the truth.
 function periodDays(rows) {
   const dates = rows.map(spentOn).sort();
   const from = analysis.from || dates[0];
@@ -957,42 +1253,63 @@ function periodDays(rows) {
 
 function renderAnalysis() {
   if (analysis.accounts === null) analysis.accounts = new Set(DATA.accounts.map(a => a.id));
-  const rows = analysisRows();
+  if (analysis.from === undefined) applyPeriod(DEFAULT_PERIOD);
+
+  // Everything the accounts and period select, before the category ticks. The
+  // table lists all of these, so a category you have ticked off is still there
+  // to tick back on, and the drill-down still works on it.
+  const all = analysisRows();
+  const spentAll = all.reduce((n, t) => n - t.amount, 0);
+  const listed = tally(all);
+
+  // What the cards and charts are about: the ticked categories only.
+  const rows = all.filter(t => !analysis.hidden.has(catOf(t)));
   const spent = rows.reduce((n, t) => n - t.amount, 0);
-
-  const byCategory = {};
-  for (const t of rows) {
-    const key = t.category || "Uncategorised";
-    (byCategory[key] ||= {total: 0, n: 0, merchants: {}}).total -= t.amount;
-    byCategory[key].n++;
-  }
-  const ranked = Object.entries(byCategory).sort((a, b) => b[1].total - a[1].total);
-
+  const ranked = listed.filter(([name]) => !analysis.hidden.has(name));
+  const byCategory = Object.fromEntries(ranked);
   const days = periodDays(rows);
-
-  const table = ranked.map(([name, c]) => `<tr class="pick" data-cat="${esc(name)}">
-      <td><span class="swatch" style="background:${spendColour(name)}"></span>
-          ${esc(name)}</td>
-      <td style="width:28%"><span class="bar"><i style="width:${(100 * c.total / (ranked[0][1].total || 1)).toFixed(1)}%;background:${spendColour(name)}"></i></span></td>
-      <td class="r num">${(100 * c.total / (spent || 1)).toFixed(1)}%</td>
-      <td class="r num">${c.n}</td>
-      <td class="r amt num out">${money(c.total)}</td>
-    </tr>`).join("");
 
   document.getElementById("analysis").innerHTML = `
     <div class="title"><h2>Spending analysis</h2>
       <span class="sub">expenses only, transfers between your accounts excluded</span></div>
     ${controlsHtml()}
-    ${overviewBody(rows, ranked, spent, days, byCategory)}`;
+    ${overviewBody(rows, ranked, spent, days, byCategory, listed)}`;
 
   drawAnalysisCharts(rows, ranked);
   wireControls(document.getElementById("analysis"));
-  document.querySelectorAll("#analysis [data-cat]").forEach(row => row.onclick = () => {
+  wireCategoryTicks(document.getElementById("analysis"), listed);
+
+  renderDrill(all, spentAll);
+  restoreFind();       // the drill-down has a table, and it has a search too
+}
+
+// Category totals for a set of rows, biggest first.
+function tally(rows) {
+  const byCategory = {};
+  for (const t of rows) {
+    const c = (byCategory[catOf(t)] ||= {total: 0, n: 0});
+    c.total -= t.amount;
+    c.n++;
+  }
+  return Object.entries(byCategory).sort((a, b) => b[1].total - a[1].total);
+}
+
+function wireCategoryTicks(root, listed) {
+  root.querySelectorAll("tr[data-cat]").forEach(row => row.onclick = event => {
+    // The tick column is for including a category, not for opening it.
+    if (event.target.closest(".tick")) return;
     analysis.category = row.dataset.cat;
     render();
   });
-
-  renderDrill(rows, spent);
+  root.querySelectorAll("[data-tick]").forEach(box => box.onchange = () => {
+    box.checked ? analysis.hidden.delete(box.dataset.tick)
+                : analysis.hidden.add(box.dataset.tick);
+    render();
+  });
+  root.querySelectorAll(".all-cats").forEach(box => box.onchange = () => {
+    analysis.hidden = box.checked ? new Set() : new Set(listed.map(([name]) => name));
+    render();
+  });
 }
 
 // The account and period pickers appear both on the page and inside the
@@ -1010,11 +1327,14 @@ function controlsHtml() {
         </div></div>
       <div><div class="caption" style="margin-bottom:6px">Period</div>
         <div class="picker">
+          ${PERIODS.map(p => `<button class="chip period" type="button" data-period="${p.key}"
+            aria-current="${activePeriod() === p.key}">${p.label}</button>`).join("")}
+        </div>
+        <div class="picker" style="margin-top:6px">
           <label style="padding:0"><input type="date" class="from-date" value="${analysis.from || ""}"
             style="border:0;background:none;font:inherit;color:inherit;padding:5px 8px"></label>
           <label style="padding:0"><input type="date" class="to-date" value="${analysis.to || ""}"
             style="border:0;background:none;font:inherit;color:inherit;padding:5px 8px"></label>
-          <button class="btn ghost clear-period" type="button">All time</button>
         </div></div>
     </div>`;
 }
@@ -1029,14 +1349,21 @@ function wireControls(root) {
     analysis.accounts = box.checked ? new Set(DATA.accounts.map(a => a.id)) : new Set();
     render();
   });
+  // A date input fires `change` as each segment is completed, so typing 2026
+  // into the year arrives as 0002, 0020, 0202 and only then 2026. Re-rendering
+  // on the early ones rebuilt the field and threw the focus away mid-keystroke,
+  // which made the year impossible to type. Wait for a year that could be real.
+  const settled = value => !value || +value.slice(0, 4) >= 1990;
   root.querySelectorAll(".from-date").forEach(input => input.onchange = () => {
+    if (!settled(input.value)) return;
     analysis.from = input.value || null; render();
   });
   root.querySelectorAll(".to-date").forEach(input => input.onchange = () => {
+    if (!settled(input.value)) return;
     analysis.to = input.value || null; render();
   });
-  root.querySelectorAll(".clear-period").forEach(button => button.onclick = () => {
-    analysis.from = analysis.to = null; render();
+  root.querySelectorAll(".period").forEach(button => button.onclick = () => {
+    applyPeriod(button.dataset.period); render();
   });
 }
 
@@ -1074,11 +1401,19 @@ function closeDrill() {
 
 document.getElementById("drillClose").onclick = closeDrill;
 document.addEventListener("keydown", event => {
-  // Esc closes the search box it is typed in, and only then the drill overlay.
-  // Otherwise searching inside the overlay would shut the whole thing.
+  // Esc closes one thing at a time, the one on top: a table's search box, then
+  // full screen, then the chat, then the drill-down overlay. The chat's own Esc used to bubble on
+  // up to here too, so dismissing it also shut the drill-down underneath.
   if (event.key !== "Escape") return;
   if (event.target.classList && event.target.classList.contains("find")) {
     return closeFind(event.target.closest(".tablewrap"));
+  }
+  const chat = document.getElementById("agent");
+  if (chat.classList.contains("full")) return agentFull(false);
+  if (chat.classList.contains("open") || chat.contains(document.activeElement)) {
+    agentOpen(false);
+    if (chat.contains(document.activeElement)) document.activeElement.blur();
+    return;
   }
   closeDrill();
 });
@@ -1087,10 +1422,17 @@ document.addEventListener("keydown", event => {
 // Delegated, so it keeps working after any re-render. The handlers rebuild only
 // the tbody and the row-count line; the input itself is never replaced, so what
 // you have typed and where the caret sits both survive.
+// The search that is currently open, so it can go in the URL and survive a
+// re-render when you switch year.
+const find = {table: null, query: ""};
+
 function findIn(wrap) {
   const entry = tables.get(wrap.dataset.table);
   if (!entry) return;
   const query = wrap.querySelector(".find").value;
+  find.table = wrap.dataset.table;
+  find.query = query;
+  writeUrl();
   const shown = searchRows(entry.rows, query);
   wrap.querySelector("tbody").innerHTML = tableBody(shown, entry.opts);
   wrap.querySelector(".meta").innerHTML = query.trim()
@@ -1104,6 +1446,23 @@ function closeFind(wrap) {
   box.value = "";
   box.hidden = true;
   wrap.querySelector(".findbtn").hidden = false;
+  findIn(wrap);
+  find.table = null;
+  find.query = "";
+  writeUrl();
+}
+
+// Re-open the search after a re-render, so switching year does not throw away
+// what you were looking for.
+function restoreFind() {
+  if (!find.query) return;
+  const wrap = [...document.querySelectorAll(".tablewrap[data-table]")]
+    .find(w => w.dataset.table === find.table);
+  if (!wrap) return;
+  const box = wrap.querySelector(".find");
+  box.value = find.query;
+  box.hidden = false;
+  wrap.querySelector(".findbtn").hidden = true;
   findIn(wrap);
 }
 
@@ -1131,15 +1490,24 @@ document.addEventListener("search", event => {
   }
 });
 
-function overviewBody(rows, ranked, spent, days, byCategory) {
-  const table = ranked.map(([name, c]) => `<tr class="pick" data-cat="${esc(name)}">
+function overviewBody(rows, ranked, spent, days, byCategory, listed) {
+  // Bars are drawn against the largest category in the whole list, not the
+  // largest included one, so they stay put as you tick things on and off.
+  const widest = listed.length ? listed[0][1].total : 0;
+  const table = listed.map(([name, c]) => {
+    const on = !analysis.hidden.has(name);
+    return `<tr class="pick${on ? "" : " off"}" data-cat="${esc(name)}">
+      <td class="tick"><input type="checkbox" data-tick="${esc(name)}" ${on ? "checked" : ""}
+        aria-label="Include ${esc(name)}"></td>
       <td><span class="swatch" style="background:${spendColour(name)}"></span>
           ${esc(name)}</td>
-      <td style="width:28%"><span class="bar"><i style="width:${(100 * c.total / (ranked[0][1].total || 1)).toFixed(1)}%;background:${spendColour(name)}"></i></span></td>
-      <td class="r num">${(100 * c.total / (spent || 1)).toFixed(1)}%</td>
+      <td><span class="bar"><i style="width:${(100 * c.total / (widest || 1)).toFixed(1)}%;background:${spendColour(name)}"></i></span></td>
+      <td class="r num">${on ? (100 * c.total / (spent || 1)).toFixed(1) + "%" : "—"}</td>
       <td class="r num">${c.n}</td>
       <td class="r amt num out">${money(c.total)}</td>
-    </tr>`).join("");
+    </tr>`;
+  }).join("");
+  const allOn = analysis.hidden.size === 0;
 
   return `
     <div class="cards">
@@ -1170,23 +1538,28 @@ function overviewBody(rows, ranked, spent, days, byCategory) {
     </div>
 
     <div class="tablewrap"><div class="tcap"><span class="grp">Categories</span>
-        <span class="meta">${money(spent)} across ${ranked.length} categories · click one to drill in</span></div><table class="fixed">
-      <colgroup><col><col style="width:28%"><col style="width:5rem">
-        <col style="width:5rem"><col style="width:8rem"></colgroup>
-      <thead><tr><th>Category</th><th></th><th class="r">Share</th>
+        <span class="meta">${money(spent)} across ${ranked.length}${
+          allOn ? "" : ` of ${listed.length}`} categories · click a name to drill in</span>
+      </div><table class="fixed">
+      <colgroup><col style="width:2.2rem"><col><col style="width:28%">
+        <col style="width:5rem"><col style="width:5rem"><col style="width:8rem"></colgroup>
+      <thead><tr>
+        <th class="tick"><input type="checkbox" class="all-cats" ${allOn ? "checked" : ""}
+          aria-label="Include every category" title="Include every category"></th>
+        <th>Category</th><th></th><th class="r">Share</th>
         <th class="r">Count</th><th class="r">Total</th></tr></thead>
-      <tbody>${table || '<tr><td colspan="5" class="empty">No spending in this selection</td></tr>'}</tbody>
+      <tbody>${table || '<tr><td colspan="6" class="empty">No spending in this selection</td></tr>'}</tbody>
     </table></div>`;
 }
 
 function drillBody(name, rows) {
   const total = rows.reduce((n, t) => n - t.amount, 0);
   // The whole selection's span, not this category's own. Dividing a one-off by
-  // the gap between its first and last row gave Donations — a single $104.45 —
-  // a "per month" of $3,179.46.
+  // the gap between its first and last row gave a category with a single transaction
+  // a "per month" some thirty times its whole total.
   const days = periodDays(analysisRows());
   // Median, not mean. "Typical" promises a representative transaction, and the
-  // mean does not survive one $2,559.99 flight among $15 ones.
+  // mean does not survive one expensive flight among cheap ones.
   const sorted = rows.map(t => -t.amount).sort((a, b) => a - b);
   const middle = sorted.length
     ? (sorted.length % 2 ? sorted[(sorted.length - 1) / 2]
@@ -1313,9 +1686,9 @@ function drawAnalysisCharts(rows, ranked) {
 // from your parents are both income, and worth telling apart.
 function renderRules() {
   // Transfers are excluded here as they are everywhere else. Summing them in
-  // made "Paying people" read -$520,459.75 — more than all-time income — by
-  // adding $351,387.95 of money moved between the user's own accounts to
-  // $169,071.80 of real spending.
+  // made "Paying people" read more than all-time income, by adding money
+  // moved between the user's own accounts — about two thirds of it — to
+  // the real spending.
   const byCategory = {};
   for (const t of DATA.transactions) {
     if (!t.category || t.type === "transfer") continue;
@@ -1406,11 +1779,461 @@ async function save(item) {
 
 const esc = t => String(t).replace(/[<>&]/g, c => ({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));
 
+// Where you are and what you have filtered lives in the URL, so a refresh, a
+// bookmark or a link opens the same screen instead of All accounts.
+const TABS = ["holdings", "investments", "rules", "analysis"];
+
+function writeUrl() {
+  const p = new URLSearchParams();
+  p.set("view", state.account);
+  if (state.year !== undefined) p.set("year", state.year === null ? "all" : state.year);
+  const period = activePeriod();
+  if (period) p.set("period", period);
+  else {
+    if (analysis.from) p.set("from", analysis.from);
+    if (analysis.to) p.set("to", analysis.to);
+  }
+  if (analysis.accounts && analysis.accounts.size !== DATA.accounts.length)
+    p.set("accts", [...analysis.accounts].join(","));
+  if (analysis.hidden.size) p.set("hide", [...analysis.hidden].join("~"));
+  if (analysis.category) p.set("cat", analysis.category);
+  if (find.query) { p.set("q", find.query); p.set("qt", find.table); }
+  history.replaceState(null, "", location.pathname + "?" + p);
+}
+
+function readUrl() {
+  const p = new URLSearchParams(location.search);
+  const view = p.get("view");
+  // An account that no longer exists would break every view, so check first.
+  if (TABS.includes(view) || view === "all") state.account = view;
+  else if (view && DATA.accounts.some(a => a.id === +view)) state.account = +view;
+
+  const year = p.get("year");
+  if (year) state.year = year === "all" ? null : year;
+
+  if (p.has("period")) applyPeriod(p.get("period"));
+  else if (p.has("from") || p.has("to")) {
+    analysis.from = p.get("from") || null;
+    analysis.to = p.get("to") || null;
+  }
+  if (p.has("accts")) analysis.accounts = new Set(p.get("accts").split(",").map(Number));
+  if (p.has("hide")) analysis.hidden = new Set(p.get("hide").split("~"));
+  if (p.has("cat")) analysis.category = p.get("cat");
+  if (p.has("q")) { find.query = p.get("q"); find.table = p.get("qt"); }
+}
+
+// ---------- the agent ----------
+// Everything it says lands in the bar at the top. The bar is always there, one
+// line tall, so a question never needs a click first.
+const agent = {session: null, busy: false, turns: 0, queue: [], turn: null, controller: null};
+
+const agentBox = () => document.getElementById("agent");
+const agentLog = () => document.getElementById("agentLog");
+const agentInput = () => document.getElementById("agentInput");
+
+// Full screen gives the chat the whole window. It sits one layer above the open
+// panel: Esc steps back down to the panel before it closes anything, and
+// shutting the panel always leaves full screen too.
+function agentFull(on) {
+  agentBox().classList.toggle("full", on);
+  const button = document.getElementById("agentFull");
+  const label = on ? "Exit full screen" : "Full screen";
+  button.setAttribute("aria-pressed", on ? "true" : "false");
+  button.setAttribute("aria-label", label);
+  button.title = label;
+  if (on) agentLog().scrollTop = agentLog().scrollHeight;
+}
+
+function agentOpen(open) {
+  // Nothing said yet means nothing to show: clicking into an empty box should
+  // not drop an empty panel over the page.
+  const said = agentLog().children.length > 0;
+  agentBox().classList.toggle("open", open && said);
+  // Full screen is the open panel made bigger; with the panel shut it cannot stay.
+  if (!(open && said)) agentFull(false);
+  agentInput().placeholder = said && !open ? "Continue chatting…"
+                                           : "Ask about your money…";
+  if (open && said) agentLog().scrollTop = agentLog().scrollHeight;
+}
+
+// The box grows with what you type rather than scrolling a single line away.
+function agentGrow() {
+  const box = agentInput();
+  box.style.height = "auto";
+  box.style.height = Math.min(box.scrollHeight, window.innerHeight * 0.4) + "px";
+  const send = document.getElementById("agentSend");
+  send.hidden = !box.value.trim();
+  // Mid-turn, sending does not interrupt: it waits, and the button says so.
+  send.textContent = agent.busy ? "Queue" : "Send";
+}
+
+function agentTurn(question, queued = false) {
+  const turn = document.createElement("div");
+  turn.className = "turn";
+  turn.innerHTML = `<div class="you${queued ? " queued" : ""}">${esc(question)}${
+      queued ? '<span class="tag-queued">queued</span>' : ""}</div>`
+    + `<div class="steps"></div><div class="said"></div>`;
+  agentLog().append(turn);
+  agent.turns++;
+  agentOpen(true);
+  saveChat();
+  return turn;
+}
+
+function agentStep(turn, html) {
+  const steps = turn.querySelector(".steps");
+  steps.insertAdjacentHTML("beforeend", html);
+  agentLog().scrollTop = agentLog().scrollHeight;
+}
+
+// This app's own tools, in plain words. Anything the SDK runs on its own
+// behalf — ToolSearch, for one — is left out of the steps entirely.
+const STEP_LABELS = {schema: "reading the schema", run_query: "querying",
+                     read_rows: "reading transactions", set_view: "changing the view",
+                     propose_change: "drafting a change"};
+
+// Markdown for an answer, drawn the way a terminal would: tables, lists,
+// headings, quotes, rules, code blocks, bold, italic, inline code and links, at
+// one text size. Every piece of text is escaped before any of these patterns
+// turn parts of it back into tags, so nothing the model writes becomes live
+// HTML on the page.
+function mdInline(text) {
+  // Code spans are set aside as <cN> markers first, so a ** inside backticks
+  // stays literal. esc() has already turned every < into &lt;, so the model's
+  // own text can never contain a marker by accident.
+  const codes = [];
+  let s = esc(text).replace(/`([^`]+)`/g, (_, code) => `<c${codes.push(code) - 1}>`);
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+       .replace(/(^|[\s(])\*([^*\s][^*]*?)\*(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>")
+       .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_, label, url) =>
+         `<a href="${url.replace(/"/g, "&quot;")}" target="_blank" rel="noopener">${label}</a>`);
+  return s.replace(/<c(\d+)>/g, (_, n) => `<code>${codes[n]}</code>`);
+}
+
+function md(text) {
+  const lines = text.replace(/\r/g, "").split("\n");
+  const TABLE_RULE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+  const LIST = /^(\s*)([-*•+]|\d+[.)])\s+(.*)$/;
+  const isTable = i => lines[i].includes("|") && i + 1 < lines.length && TABLE_RULE.test(lines[i + 1]);
+  const startsBlock = i => /^\s*(```|#{1,6}\s|>)/.test(lines[i]) || LIST.test(lines[i]) || isTable(i);
+  const cells = line => line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim());
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i++; continue; }
+
+    if (/^\s*```/.test(line)) {
+      const body = [];
+      for (i++; i < lines.length && !/^\s*```/.test(lines[i]); i++) body.push(lines[i]);
+      i++;
+      out.push(`<pre class="md-code">${esc(body.join("\n"))}</pre>`);
+    } else if (isTable(i)) {
+      const head = cells(line);
+      const align = cells(lines[i + 1]).map(c =>
+        c.endsWith(":") ? (c.startsWith(":") ? "center" : "right") : "left");
+      const rows = [];
+      for (i += 2; i < lines.length && lines[i].includes("|"); i++) rows.push(cells(lines[i]));
+      const cell = (tag, value, k) =>
+        `<${tag} style="text-align:${align[k] || "left"}">${mdInline(value || "")}</${tag}>`;
+      out.push(`<div class="md-table"><table><thead><tr>${head.map((c, k) => cell("th", c, k)).join("")}`
+        + `</tr></thead><tbody>${rows.map(r => `<tr>${head.map((_, k) => cell("td", r[k], k)).join("")}</tr>`)
+        .join("")}</tbody></table></div>`);
+    } else if (/^\s*#{1,6}\s+/.test(line)) {
+      out.push(`<div class="md-h">${mdInline(line.replace(/^\s*#{1,6}\s+/, ""))}</div>`);
+      i++;
+    } else if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
+      out.push(`<hr class="md-hr">`);
+      i++;
+    } else if (/^\s*>/.test(line)) {
+      const body = [];
+      for (; i < lines.length && /^\s*>/.test(lines[i]); i++) body.push(mdInline(lines[i].replace(/^\s*>\s?/, "")));
+      out.push(`<div class="md-quote">${body.join("<br>")}</div>`);
+    } else if (LIST.test(line)) {
+      const items = [];
+      for (; i < lines.length && LIST.test(lines[i]); i++) {
+        const [, indent, marker, content] = lines[i].match(LIST);
+        const level = Math.floor(indent.replace(/\t/g, "  ").length / 2);
+        items.push(`<div class="md-li" style="--level:${level}"><span class="md-mark">${
+          /\d/.test(marker) ? esc(marker.replace(")", ".")) : "•"}</span><span>${mdInline(content)}</span></div>`);
+      }
+      out.push(`<div class="md-list">${items.join("")}</div>`);
+    } else {
+      const para = [line];
+      for (i++; i < lines.length && lines[i].trim() && !startsBlock(i); i++) para.push(lines[i]);
+      out.push(`<p>${para.map(mdInline).join("<br>")}</p>`);
+    }
+  }
+  return out.join("");
+}
+
+const VIEW_NAMES = {all: "all accounts", analysis: "spending analysis",
+                    holdings: "term deposits", investments: "investments",
+                    rules: "income sources"};
+
+// "showing you spending analysis · last 12 months · 8 of 41 categories", not
+// every parameter spelled out. Hiding 33 categories used to print all 33 names.
+function describeView(params) {
+  const parts = [];
+  if (params.view) parts.push(VIEW_NAMES[params.view]
+    || (DATA.accounts.find(a => String(a.id) === params.view) || {}).label || params.view);
+  if (params.year) parts.push(params.year === "all" ? "all years" : params.year);
+  if (params.period) parts.push({ytd: "this year", all: "all time"}[params.period]
+    || "last " + ((PERIODS.find(p => p.key === params.period) || {}).label || params.period));
+  if (params.from || params.to) parts.push(`${params.from || "the start"} to ${params.to || "now"}`);
+  if (params.hide !== undefined) {
+    const hidden = new Set(params.hide ? params.hide.split("~") : []);
+    const names = tally(analysisRows()).map(([name]) => name);
+    parts.push(`${names.filter(n => !hidden.has(n)).length} of ${names.length} categories`);
+  }
+  if (params.cat) parts.push(`${params.cat} in detail`);
+  if (params.q) parts.push(`search “${params.q}”`);
+  return parts.join(" · ") || "a different view";
+}
+
+// Chat events, one per line of the stream.
+function agentEvent(turn, event) {
+  const said = turn.querySelector(".said");
+  if (event.type === "text") {
+    // Each event is a whole block of text. Separate blocks are separate
+    // thoughts — one before a query, one after — so each becomes a paragraph.
+    said.dataset.raw = said.dataset.raw ? said.dataset.raw + "\n\n" + event.text : event.text;
+    said.innerHTML = md(said.dataset.raw);
+  } else if (event.type === "tool") {
+    const label = STEP_LABELS[event.name];
+    if (!label) return;
+    agentStep(turn, `<div class="step" data-tool="${esc(event.name)}">· ${label}</div>`);
+  } else if (event.type === "query") {
+    // Replace the "querying" line with the query itself, there to be checked.
+    const pending = turn.querySelector('.step[data-tool="run_query"]');
+    const html = `<details class="work"><summary>· ${esc(event.purpose || "query")}
+        — ${event.rows.toLocaleString()} rows</summary><pre>${esc(event.sql)}</pre></details>`;
+    pending ? pending.outerHTML = html : agentStep(turn, html);
+  } else if (event.type === "read") {
+    const pending = turn.querySelector('.step[data-tool="read_rows"]');
+    const html = `<div class="step">· read ${event.rows} of ${event.of.toLocaleString()} rows</div>`;
+    pending ? pending.outerHTML = html : agentStep(turn, html);
+  } else if (event.type === "view") {
+    applyView(event.params);
+    // One readable line in place of "changing the view", not a second line.
+    const pending = turn.querySelector('.step[data-tool="set_view"]');
+    const html = `<div class="step">· showing you ${esc(describeView(event.params))}</div>`;
+    pending ? pending.outerHTML = html : agentStep(turn, html);
+  } else if (event.type === "proposal") {
+    said.insertAdjacentHTML("afterend", `<div class="propose" data-sql="${
+        esc(event.sql).replace(/"/g, "&quot;")}">
+      <h4>${esc(event.title)}</h4><p>${esc(event.why)}</p>
+      <details class="work"><summary>· what it runs</summary><pre>${esc(event.sql)}</pre></details>
+      <button class="btn apply-change" type="button">Apply</button>
+      <button class="btn ghost dismiss-change" type="button">Dismiss</button></div>`);
+  } else if (event.type === "turn") {
+    agent.turn = event.id;
+  } else if (event.type === "session") {
+    agent.session = event.id;
+  } else if (event.type === "done") {
+    if (event.session) agent.session = event.session;
+    if (event.stopped) {
+      turn.insertAdjacentHTML("beforeend", `<div class="agent-note">· stopped</div>`);
+    } else if (event.error) {
+      turn.insertAdjacentHTML("beforeend",
+        `<div class="agent-err">${esc(event.message || "That did not go through.")}</div>`);
+    }
+    saveChat();
+  }
+  agentLog().scrollTop = agentLog().scrollHeight;
+}
+
+// The agent drives the page the same way you do: by setting URL parameters and
+// re-reading them. Nothing else needs to know the agent exists.
+function applyView(params) {
+  const url = new URLSearchParams(location.search);
+  for (const [key, value] of Object.entries(params)) url.set(key, value);
+  history.replaceState(null, "", location.pathname + "?" + url);
+  readUrl();
+  render();
+}
+
+// Thinking means a model call or a tool is actually in flight. The moment the
+// agent hands back — with an answer, or with a question for you — it stops.
+function agentThinking(on) {
+  agentBox().classList.toggle("thinking", on);
+  agentLog().setAttribute("aria-busy", on ? "true" : "false");
+  document.getElementById("agentSpin").hidden = !on;
+  document.getElementById("agentStop").hidden = !on;
+  agentGrow();
+}
+
+// Asking while a turn is running does not interrupt it. The question joins a
+// queue, shows as queued, and goes out the moment the current turn ends.
+async function agentAsk(question, turn = null) {
+  if (!question.trim()) return;
+  if (agent.busy) {
+    agent.queue.push({question, turn: agentTurn(question, true)});
+    return;
+  }
+  agent.busy = true;
+  if (turn) {
+    turn.querySelector(".you").classList.remove("queued");
+    turn.querySelector(".tag-queued")?.remove();
+  } else {
+    turn = agentTurn(question);
+  }
+  agent.turn = null;
+  agent.controller = new AbortController();
+  agentThinking(true);
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({message: question, session: agent.session}),
+      signal: agent.controller.signal,
+    });
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream: true});
+      // Server-sent events: one JSON object per "data:" line, blank line between.
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop();
+      for (const part of parts) {
+        const line = part.replace(/^data: /, "").trim();
+        if (line) agentEvent(turn, JSON.parse(line));
+      }
+    }
+  } catch (error) {
+    agentEvent(turn, error.name === "AbortError"
+      ? {type: "done", stopped: true}
+      : {type: "done", error: true, message: error.message});
+  } finally {
+    // finally, not after the try: a dropped connection must still stop the
+    // spinner, or it turns forever on a turn that is never coming back.
+    agent.busy = false;
+    agent.controller = null;
+    agent.turn = null;
+    agentThinking(false);
+    const next = agent.queue.shift();
+    if (next) agentAsk(next.question, next.turn);
+  }
+}
+
+// Stop ends the turn in two places at once. The server cancels the model call,
+// which terminates the claude process rather than leaving it running on your
+// quota; aborting the request stops the page waiting for it. Anything queued
+// behind it still goes out next, as it would in Claude Code.
+function agentStop() {
+  if (agent.turn) {
+    fetch("/api/stop", {method: "POST", headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({turn: agent.turn})}).catch(() => {});
+  }
+  if (agent.controller) agent.controller.abort();
+}
+
+// The conversation outlives a refresh. What is kept is the log exactly as it was
+// drawn, plus the session id, so a reload shows what you saw and the next
+// question carries on in the same session. Questions still sitting in the queue
+// are dropped: the reload cancelled them, and they would never be sent.
+const CHAT_KEY = "finance-book.chat";
+
+function saveChat() {
+  try {
+    const turns = [...agentLog().children].filter(t => !t.querySelector(".you.queued"));
+    localStorage.setItem(CHAT_KEY, JSON.stringify({
+      session: agent.session,
+      html: turns.slice(-60).map(t => t.outerHTML).join(""),   // bounded; the oldest go first
+    }));
+  } catch {
+    // A private window or full storage. The chat still works; it just won't survive a reload.
+  }
+}
+
+function restoreChat() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CHAT_KEY) || "null");
+    if (!saved) return;
+    agent.session = saved.session || null;
+    agentLog().innerHTML = saved.html || "";
+    agent.turns = agentLog().children.length;
+    agentOpen(false);                     // collapsed, reading "Continue chatting…"
+  } catch {
+    localStorage.removeItem(CHAT_KEY);    // unreadable: start clean rather than break the bar
+  }
+}
+
+function wireAgent() {
+  const box = agentInput();
+  const form = document.getElementById("agentForm");
+  restoreChat();
+  // Catches a refresh in the middle of an answer, not just between turns.
+  window.addEventListener("beforeunload", saveChat);
+  box.addEventListener("input", agentGrow);
+  box.addEventListener("focus", () => agentOpen(true));
+  box.addEventListener("keydown", event => {
+    // Enter sends. Shift+Enter is a new line, and the box grows to fit it.
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
+  });
+  form.onsubmit = event => {
+    event.preventDefault();
+    const question = box.value;
+    box.value = "";
+    agentGrow();
+    agentAsk(question);
+  };
+  // Cmd+K from anywhere, including from inside another input. The browser binds
+  // Cmd+K to its own address bar, so that has to be suppressed. The caret goes
+  // to the end rather than selecting, so a half-typed question survives.
+  document.addEventListener("keydown", event => {
+    if ((event.key || "").toLowerCase() !== "k" || !(event.metaKey || event.ctrlKey)) return;
+    event.preventDefault();
+    box.focus();
+    box.setSelectionRange(box.value.length, box.value.length);
+  });
+  document.getElementById("agentStop").onclick = agentStop;
+  document.getElementById("agentFull").onclick = () =>
+    agentFull(!agentBox().classList.contains("full"));
+  // Over the chat, the wheel scrolls the conversation or the box you are typing
+  // in — never the page behind. When either reaches its end the scroll stops
+  // there instead of carrying on into the tables underneath.
+  agentBox().addEventListener("wheel", event => {
+    if (!event.deltaY) return;                      // sideways, e.g. a wide query
+    const scroller = [agentLog(), agentInput()].find(el => el.contains(event.target));
+    const room = scroller && (event.deltaY < 0
+      ? scroller.scrollTop > 0
+      : scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 1);
+    if (!room) event.preventDefault();
+  }, {passive: false});
+  // Clicking the page puts the answers away; the input stays where it is.
+  document.addEventListener("mousedown", event => {
+    if (!agentBox().contains(event.target)) agentOpen(false);
+  });
+  agentLog().addEventListener("click", async event => {
+    const panel = event.target.closest(".propose");
+    if (!panel) return;
+    if (event.target.classList.contains("dismiss-change")) { panel.remove(); return saveChat(); }
+    if (!event.target.classList.contains("apply-change")) return;
+    event.target.disabled = true;
+    const answer = await fetch("/api/apply", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({sql: panel.dataset.sql}),
+    }).then(r => r.json());
+    panel.innerHTML = answer.error
+      ? `<div class="agent-err">${esc(answer.error)}</div>`
+      : `<p>Applied to ${answer.changed} row${answer.changed === 1 ? "" : "s"}.
+         Reload to see it in the totals.</p>`;
+    if (answer.rules) DATA.rules = answer.rules;
+    saveChat();
+  });
+}
+
 function render() {
+  writeUrl();
   renderSidebar();
-  const view = ["holdings", "investments", "rules", "analysis"].includes(state.account)
-    ? state.account : "ledger";
-  for (const id of ["ledger", "holdings", "investments", "rules", "analysis"]) {
+  const view = TABS.includes(state.account) ? state.account : "ledger";
+  for (const id of ["ledger", ...TABS]) {
     document.getElementById(id).hidden = id !== view;
   }
   if (view === "analysis") return renderAnalysis();
@@ -1428,6 +2251,8 @@ function render() {
   renderSummary();
   renderCharts();
   renderTables();
+  restoreFind();
+  writeUrl();          // again: renderYears has just settled state.year
 }
 
 fetch("data.json")
@@ -1436,7 +2261,9 @@ fetch("data.json")
     DATA = d;
     DATA.holdings = DATA.holdings || [];
     DATA.rules = DATA.rules || [];
+    readUrl();          // needs DATA, to check the account in ?view= still exists
     render();
+    wireAgent();
   })
   .catch(e => {
     document.querySelector("main").innerHTML =

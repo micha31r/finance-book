@@ -12,6 +12,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+import uuid
 import webbrowser
 from datetime import datetime, timezone
 from functools import partial
@@ -58,6 +59,11 @@ def main():
 
 
 DB = ROOT / "backend" / "finance.db"
+
+# Turns in progress, so a Stop from another request can reach the right one.
+# Each is its cancel scope plus the token of the event loop running it: the
+# stop arrives on a different thread and has to be handed back to that loop.
+turns = {}
 
 
 def rebuild():
@@ -110,6 +116,68 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _chat(self, item):
+        """Stream one turn of the agent as server-sent events.
+
+        The reply is written out as it arrives rather than collected, so the
+        page can show text and move the view while the agent is still working.
+        ThreadingHTTPServer means holding this socket open blocks nothing else.
+        """
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+
+        def emit(event):
+            self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
+            self.wfile.flush()
+
+        # Imported here, not at the top: the rest of the app works fine without
+        # the agent SDK installed, and should keep working.
+        try:
+            import anyio
+            import anyio.lowlevel
+            sys.path.insert(0, str(ROOT / "backend"))
+            import agent
+        except ImportError:
+            return emit({"type": "done", "error": True,
+                         "message": "Install the agent first: .venv/bin/pip install claude-agent-sdk"})
+
+        turn = uuid.uuid4().hex[:12]
+
+        async def run():
+            with anyio.CancelScope() as scope:
+                turns[turn] = (scope, anyio.lowlevel.current_token())
+                events = agent.stream(item.get("message", ""), item.get("session"))
+                try:
+                    emit({"type": "turn", "id": turn})
+                    async for event in events:
+                        emit(event)
+                finally:
+                    turns.pop(turn, None)
+                    # Close the stream even when cancelled, shielded so the close is
+                    # not itself cancelled. Closing reaches the SDK's own cleanup,
+                    # which terminates the claude process instead of leaving the
+                    # model working, and billing, for an answer nobody will read.
+                    with anyio.CancelScope(shield=True):
+                        await events.aclose()
+            if scope.cancelled_caught:
+                emit({"type": "done", "stopped": True})
+
+        try:
+            anyio.run(run)
+        except BrokenPipeError:
+            pass                                   # the user navigated away mid-answer
+        except Exception as error:
+            message = str(error)
+            if "authenticate" in message.lower():
+                message = ("The claude CLI is not signed in. Run `claude` in a terminal "
+                           "and sign in, then try again.")
+            try:
+                emit({"type": "done", "error": True, "message": message})
+            except BrokenPipeError:
+                pass
+
     def do_GET(self):
         if self.path == "/api/holdings":
             return self._send(self._holdings())
@@ -118,8 +186,34 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
-        if self.path not in ("/api/holdings", "/api/rules"):
+        if self.path not in ("/api/holdings", "/api/rules", "/api/chat", "/api/apply", "/api/stop"):
             return self.send_error(404)
+        if self.path == "/api/chat":
+            size = int(self.headers.get("Content-Length", 0))
+            return self._chat(json.loads(self.rfile.read(size) or b"{}"))
+        if self.path == "/api/stop":
+            size = int(self.headers.get("Content-Length", 0))
+            found = turns.get(json.loads(self.rfile.read(size) or b"{}").get("turn"))
+            if not found:
+                return self._send({"stopped": False})      # already finished, or never existed
+            import anyio.from_thread
+            scope, token = found
+            try:
+                anyio.from_thread.run_sync(scope.cancel, token=token)
+            except RuntimeError:
+                return self._send({"stopped": False})      # finished in the moment between
+            return self._send({"stopped": True})
+        if self.path == "/api/apply":
+            size = int(self.headers.get("Content-Length", 0))
+            item = json.loads(self.rfile.read(size) or b"{}")
+            sys.path.insert(0, str(ROOT / "backend"))
+            import agent
+            try:
+                changed = agent.apply_proposal(item.get("sql", ""))
+            except Exception as error:
+                return self._send({"error": str(error)}, 400)
+            rebuild()
+            return self._send({"changed": changed, "rules": self._rules()})
         size = int(self.headers.get("Content-Length", 0))
         item = json.loads(self.rfile.read(size) or b"{}")
         if self.path == "/api/rules":
