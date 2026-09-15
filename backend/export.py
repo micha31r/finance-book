@@ -5,8 +5,14 @@ The frontend is a static page, so it cannot query SQLite. Everything it needs
 is decided here, where the schema rules live: which balance is current, what an
 account should be called, and a running balance for rows whose source printed
 none.
+
+It exits 0 once data.json is written, or 3 if it is written but a derived
+balance disagrees with a printed one. An error stops it before the file is
+replaced, and Python exits 1. Not 2: Python exits 2 when it cannot run the
+script at all. serve.py reads these codes.
 """
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,12 +43,25 @@ def label(bank, product, name, number):
 
 
 def current_balance(conn, account_id):
-    """Closing balance of the newest document that states one."""
+    """The balance now, and the date it is as at.
+
+    That is the newest closing balance a document states, plus any rows dated
+    after it. Those come from a file that states no balance, like an ANZ CSV
+    export downloaded after the last statement. Leaving them out would shift
+    every running balance derived from this one. When a statement and a
+    Transaction List end on the same day the statement wins, because the list
+    may predate that day's interest.
+    """
     row = conn.execute(
         "SELECT closing_balance, period_end FROM document"
         " WHERE account_id = ? AND closing_balance IS NOT NULL"
-        " ORDER BY period_end DESC LIMIT 1", (account_id,)).fetchone()
-    return (row["closing_balance"], row["period_end"]) if row else (None, None)
+        " ORDER BY period_end DESC, kind = 'statement' DESC LIMIT 1", (account_id,)).fetchone()
+    if row is None:
+        return None, None
+    later = conn.execute(
+        "SELECT COALESCE(SUM(amount), 0) AS net, MAX(date) AS last FROM txn"
+        " WHERE account_id = ? AND date > ?", (account_id, row["period_end"])).fetchone()
+    return row["closing_balance"] + later["net"], later["last"] or row["period_end"]
 
 
 def export(conn):
@@ -95,8 +114,6 @@ def export(conn):
             "bsb": row["bsb"],
             "balance": balance,
             "as_at": as_at,
-            "first": rows[0]["date"] if rows else None,
-            "last": rows[-1]["date"] if rows else None,
             "count": len(rows),
         })
 
@@ -104,7 +121,7 @@ def export(conn):
         # Count what this pattern matches. Counting rows that merely share the
         # category made every rule in a shared category report the same
         # inflated number: 86 rules claimed 9,315 matches over 3,505 rows.
-        "SELECT r.id, r.pattern, r.category, r.note,"
+        "SELECT r.id, r.pattern, r.category,"
         " (SELECT COUNT(*) FROM txn WHERE description REGEXP r.pattern) AS matches"
         " FROM rule r ORDER BY r.id")]
     holdings = [dict(r) for r in conn.execute(
@@ -115,13 +132,16 @@ def export(conn):
     # If the only such accounts are your term deposits, this is what should be
     # sitting in them right now, and it is a direct check on what you enter.
     parked = conn.execute(
+        # A pair only cancels out while both legs are transfers. If you typed one
+        # leg as spending, the other is money that went somewhere unheld.
         "SELECT COALESCE(SUM(amount), 0) n FROM txn WHERE type = 'transfer' AND id NOT IN"
-        " (SELECT from_txn_id FROM transfer WHERE confirmed = 1"
-        "  UNION SELECT to_txn_id FROM transfer WHERE confirmed = 1)").fetchone()["n"]
+        " (SELECT p.from_txn_id FROM transfer p JOIN txn leg ON leg.id = p.to_txn_id"
+        "   WHERE p.confirmed = 1 AND leg.type = 'transfer'"
+        "  UNION SELECT p.to_txn_id FROM transfer p JOIN txn leg ON leg.id = p.from_txn_id"
+        "   WHERE p.confirmed = 1 AND leg.type = 'transfer')").fetchone()["n"]
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "net_worth": sum(a["balance"] or 0 for a in accounts) + sum(h["balance"] for h in holdings),
         "accounts": accounts,
         "holdings": holdings,
         "rules": rules,
@@ -145,16 +165,22 @@ def main():
     conn.close()
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(json.dumps(data, separators=(",", ":")))
+    # Write a whole file beside the old one, then swap it in, so the page never
+    # reads half of one. The pid keeps two exports running at once apart.
+    temp = OUTPUT.with_name(f"{OUTPUT.name}.{os.getpid()}.tmp")
+    temp.write_text(json.dumps(data, separators=(",", ":")))
+    os.replace(temp, OUTPUT)
     size = OUTPUT.stat().st_size / 1_000_000
     print(f"{OUTPUT.name}: {len(data['transactions'])} transactions, "
           f"{len(data['accounts'])} accounts, {size:.1f} MB")
-    print(f"net worth: {data['net_worth'] / 100:,.2f}")
+    net_worth = (sum(a["balance"] or 0 for a in data["accounts"])
+                 + sum(h["balance"] for h in data["holdings"]))
+    print(f"net worth: {net_worth / 100:,.2f}")
     if mismatches:
         print(f"WARNING: {len(mismatches)} derived balances disagree with the printed ones")
         for t in mismatches[:5]:
             print(f"  {t['date']} {t['amount'] / 100:,.2f}  {t['description'][:52]}")
-        return 1
+        return 3
     return 0
 
 

@@ -87,18 +87,23 @@ def resolve_account(conn, doc):
           f"(best overlap {best} rows, too weak to decide)")
     for i, account in enumerate(candidates, 1):
         print(f"    [{i}] {account['bsb'] or '?'}-{account['number']} {account['name'] or ''}")
-    print("    [n] enter an account number")
-    choice = input("  > ").strip()
-    if choice.isdigit() and 1 <= int(choice) <= len(candidates):
-        doc.number = candidates[int(choice) - 1]["number"]
-        doc.bsb = doc.bsb or candidates[int(choice) - 1]["bsb"]
-        return True
-    manual = choice if choice.isdigit() else input("  account number > ").strip()
-    if manual:
-        doc.number = manual
-        return True
-    print(f"    SKIPPED {doc.source_name}")
-    return False
+    print("    or type the 9-digit account number, or press Enter to skip")
+    while True:
+        choice = input("  > ").strip()
+        if choice.isdigit() and 1 <= int(choice) <= len(candidates):
+            doc.number = candidates[int(choice) - 1]["number"]
+            doc.bsb = doc.bsb or candidates[int(choice) - 1]["bsb"]
+            return True
+        # ANZ prints account numbers as 1234-56789. Anything else, like a
+        # mistyped choice, would quietly create an account that isn't yours.
+        number = choice.replace("-", "").replace(" ", "")
+        if len(number) == 9 and number.isdigit():
+            doc.number = number
+            return True
+        if not choice:
+            print(f"    SKIPPED {doc.source_name}")
+            return False
+        print("    not a listed choice or a 9-digit account number, try again")
 
 
 def main(argv):
@@ -109,7 +114,7 @@ def main(argv):
 
     documents = []
     print("\n  detected")
-    for path in paths:
+    for file_no, path in enumerate(paths):
         if not path.exists():
             print(f"    {path.name[:40]:42s} missing file")
             continue
@@ -126,39 +131,44 @@ def main(argv):
             print(f"    {path.name[:40]:42s} nothing to load (already covered elsewhere)")
             continue
         for doc in parsed:
-            documents.append(doc)
+            documents.append((file_no, doc))
             where = f"{doc.bsb or '?'}-{doc.number}" if doc.number else "account unknown"
             print(f"    {path.name[:40]:42s} {doc.bank} {doc.kind:9s} {where}")
 
     # Account files carry names and daily balances, so load them first.
-    documents.sort(key=lambda d: 0 if d.kind == "accounts" else 1)
+    documents.sort(key=lambda item: 0 if item[1].kind == "accounts" else 1)
     daily = {}
 
     conn = db.connect()
     totals = Counter()
     print()
-    for doc in documents:
-        if not resolve_account(conn, doc):
-            continue
-        key = (doc.bank, doc.number)
+    checked = []
+    for file_no, doc in documents:
         if doc.kind == "accounts":
-            daily[key] = doc.daily_balances
+            daily[(doc.bank, doc.number)] = doc.daily_balances
             db.account_id(conn, doc)
             print(f"  {doc.bank} {doc.number} {doc.account_name}: "
                   f"{len(doc.daily_balances)} daily balances for cross-checking")
             continue
-
+        # Only Westpac has daily balances, and its exports name their accounts,
+        # so this runs before an ANZ CSV export is asked which account it is.
         problems, verified = reconcile.check_document(doc)
-        extra, matched_days = reconcile.check_daily_balances(doc, daily.get(key))
-        problems += extra
-        verified = verified or matched_days > 0
+        extra, matched_days = reconcile.check_daily_balances(doc, daily.get((doc.bank, doc.number)))
+        checked.append((file_no, doc, problems + extra, verified or matched_days > 0, matched_days))
 
+    # A Westpac export holds several accounts. All of them are checked before
+    # any is written, so a file that fails anywhere leaves nothing behind. Files
+    # are told apart by their place in this run, because two can share a name.
+    failed = {file_no for file_no, _, problems, _, _ in checked if problems}
+    for file_no, doc, problems, verified, matched_days in checked:
+        if not resolve_account(conn, doc):
+            continue
         label = (f"  {doc.bank} {doc.number} {doc.kind}"
                  f"{f' #{doc.statement_no}' if doc.statement_no else ''} "
                  f"{doc.period_start} to {doc.period_end}")
-        if problems:
+        if file_no in failed:
             print(f"{label}\n    REJECTED, {len(doc.transactions)} transactions not written")
-            for problem in problems:
+            for problem in problems or ["another account in this file failed its checks"]:
                 print(f"      {problem}")
             continue
 

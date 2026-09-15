@@ -30,11 +30,15 @@ See `backend/README.md` for what is supported and what is checked.
 ## Look at it
 
 ```sh
-python3 serve.py          # http://localhost:8000
+.venv/bin/python serve.py    # http://localhost:8000
 ```
 
 Exports the database to `frontend/data.json`, then serves the page. Run it
 again after loading new statements.
+
+The bar at the top of the page asks an AI agent about your money. It uses the
+`claude` CLI's sign-in, so run `claude` once first. It reads the database
+without account numbers, and changes nothing until you click Apply.
 
 ## Documentation
 

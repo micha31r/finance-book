@@ -9,7 +9,7 @@ Loads bank statements and exports into `finance.db`. Run from this folder.
 ../.venv/bin/python export.py               # write frontend/data.json
 ../.venv/bin/python classify.py list        # movements the bank did not explain
 ../.venv/bin/python rules.py list           # every category rule
-../.venv/bin/python rules.py seed           # install the starting spending rules
+../.venv/bin/python rules.py seed           # install the starting rules
 ../.venv/bin/python rules.py todo           # merchants no rule matches yet
 ../.venv/bin/python rules.py test "PATTERN" # preview before adding
 ../.venv/bin/python rules.py add Sports "BADMINTON|TENNIS"
@@ -76,7 +76,10 @@ transactions. The occurrence counter separates transactions that really are
 identical, such as four $5.00 charges at the same shop on one day.
 
 A statement supersedes a provisional Transaction List or Report covering the
-same period. Rows are upgraded in place, not duplicated.
+same period. Rows it matches are upgraded in place. Provisional rows it does
+not match are deleted, since a statement words some rows differently (ANZ Plus
+adds `Effective Date dd/mm/yyyy`). A listing loaded after its statement adds
+nothing inside that period.
 
 ## Money
 
@@ -93,6 +96,7 @@ Stored as signed integer cents. Negative is money out. No floats anywhere.
 | `category_seed.py` | the starting merchant-to-category mapping |
 | `merchants.py` | reduce a bank description to the merchant name |
 | `export.py` | write `frontend/data.json` for the UI |
+| `agent.py` | the chat agent: read-only queries, page moves, proposed changes |
 | `db.py` | schema and idempotent writes |
 | `reconcile.py` | the checks, balance anchors, transfer matching |
 | `parsers/shared/` | PDF geometry, CSV reading, money and dates |

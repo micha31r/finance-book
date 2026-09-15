@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Set the type of transactions the bank's wording cannot explain.
 
-Some movements name no counterparty. "DETAILS ADVISED SEPARATELY" and Westpac's
-bare "WITHDRAWAL ONLINE <ref> TFR" are both money going into a term deposit,
-but nothing in the text says so. Only you know. What you decide here is stored
-and reapplied after every ingest.
+Some movements depend on what only you know. "PAYMENT TO <your name>" into an
+account you have no statements for counts as spending, but if that account is
+yours the money was a transfer. Nothing in the text says which. What you decide
+here is stored and reapplied after every ingest.
 
     python classify.py list                        what is still unexplained
-    python classify.py set transfer --like "DETAILS ADVISED SEPARATELY"
+    python classify.py set transfer --like "PAYMENT TO <your name>%"
     python classify.py set transfer --id 4131 4132
     python classify.py clear --like "..."          undo
 """

@@ -115,8 +115,11 @@ def parse(path) -> list[Document]:
         if day_month and cells.get("Balance") and (cells.get("Credit") or cells.get("Debit")):
             amount = cents(cells["Credit"]) if cells.get("Credit") else -cents(cells["Debit"])
             # Rows run newest first, so the previous row's date is the upper
-            # bound for this one when the period spans more than a year.
-            when = resolve_year(int(day_month[1]), MONTHS[day_month[2].lower()], start, end)
+            # bound for this one when the period spans more than a year. The
+            # first row is bounded by the period's end.
+            before = transactions[-1].date if transactions else end
+            when = resolve_year(int(day_month[1]), MONTHS[day_month[2].lower()], start, end,
+                                before=before)
             transactions.append(Transaction(date=when, description=" ".join(words),
                                             amount=amount, balance=cents(cells["Balance"])))
         elif transactions and pdf.is_continuation(left, words, cells):

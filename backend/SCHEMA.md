@@ -57,8 +57,10 @@ and `list` are provisional current-period listings that a later statement
 replaces.
 
 **Current balance of an account** is the `closing_balance` of its newest
-document that has one. There is no stored balance field on `account`, so that
-loading older history never disturbs the present.
+document that has one, plus the amounts of any rows dated after that
+document's `period_end`. Those rows come from a source that states no balance,
+such as an ANZ CSV export. On a tie a statement wins. There is no stored balance
+field on `account`, so that loading older history never disturbs the present.
 
 ## txn
 
@@ -68,12 +70,12 @@ loading older history never disturbs the present.
 | account_id | INTEGER | → account.id |
 | document_id | INTEGER | → document.id, where this row was last seen |
 | date | TEXT | posting date |
-| effective_date | TEXT | when it actually happened, may be null |
+| effective_date | TEXT | when it actually happened, may be null. The day money was spent is `COALESCE(effective_date, date)`. |
 | description | TEXT | as printed by the bank |
 | amount | INTEGER | signed cents. Negative is money out. |
 | balance | INTEGER | running balance after this row, **null when the source had no balance column** |
 | type | TEXT | `income`, `expense`, `transfer` |
-| category | TEXT | where it came from, set by `rule`. Null if no rule matches. |
+| category | TEXT | where it came from, set by `rule`. Null if no rule matches. A transfer only gets one from a rule with a type. |
 | counterparty | TEXT | the other account number, internal transfers only |
 | reference | TEXT | bank trace number, pairs the two legs of a transfer |
 | provisional | INTEGER | 1 if from a `report` or `list` |
@@ -117,7 +119,7 @@ Links the two legs of one movement.
 | id | INTEGER | primary key |
 | from_txn_id | INTEGER | → txn.id, the negative leg |
 | to_txn_id | INTEGER | → txn.id, the positive leg |
-| method | TEXT | `reference` (exact, shared trace number) or `cross-bank` (you confirmed it) |
+| method | TEXT | `reference` (shared trace number), `amount` (same amount between your own accounts within a few days, backed by transfer wording or your name), `cross-bank` (you confirmed it) or `rejected` (a suggestion you turned down) |
 | confirmed | INTEGER | 1 = a real transfer, 0 = you rejected the suggestion |
 
 A leg can be typed `transfer` without a row here, when the other side has not
@@ -135,9 +137,10 @@ Your decision about one transaction, when the bank's wording cannot settle it.
 | set_at | TEXT | ISO timestamp |
 
 Applied last by `reclassify`, so no automatic rule can undo it. Set it with
-`classify.py`. Needed because some movements name no counterparty at all:
-`DETAILS ADVISED SEPARATELY` and Westpac's bare `WITHDRAWAL ONLINE <ref> TFR`
-are both money going into a term deposit, and nothing in the text says so.
+`classify.py`. Needed because some movements name no counterparty at all, such
+as a payment to your own name at a bank you have no statements for. Wording a
+bank always uses for the same thing, like `DETAILS ADVISED SEPARATELY` for money
+into a term deposit, is better as a rule with a type.
 
 ## rule
 
@@ -153,9 +156,13 @@ Labels transactions by matching a regular expression against the description.
 | created_at | TEXT | ISO timestamp |
 
 Rules run in id order and the last match wins, so a broad rule can be written
-first and narrowed by a later one. `rules.py seed` installs a starting set of
-spending rules from `category_seed.py`; after that they are ordinary rows and
-you edit them like any other.
+first and narrowed by a later one. `rules.py seed` installs a starting set from
+`category_seed.py`, including the typed rules that mark term-deposit movements
+as transfers and interest as income. After that they are ordinary rows and you
+edit them like any other.
+
+A rule without a type labels income and spending only. It skips transfers, so
+money moved between your own accounts never carries a spending category.
 
 A category never changes `type`. It answers a different question:
 
@@ -248,7 +255,9 @@ running balance. Do not build a balance chart from that column alone. Derive it
 by running the amounts forward from a document's `opening_balance`.
 
 **Provisional rows can change.** Anything with `provisional = 1` came from a
-current-period listing and will be replaced when the statement arrives.
+current-period listing and will be replaced when the statement arrives. A
+statement deletes any it does not match, and a listing loaded after its
+statement adds nothing inside that period.
 
 **Amounts are exact.** Never convert to float for arithmetic. Sum the integers,
 divide by 100 at the end.

@@ -1,9 +1,10 @@
-"""Starting mapping from merchant name to spending category.
+"""Starting rules: which category a description belongs to.
 
-Each entry is (category, regular expression) matched case-insensitively against
-the raw description. Order matters: later rules win, so a specific rule can
-follow a broad one. Seeded once with `rules.py seed`; after that it is just
-rows in the `rule` table and you edit them like any other.
+Each entry is (category, regular expression), matched case-insensitively against
+the raw description. A third item sets the type as well, for wording whose
+meaning the bank has already settled. Order matters: later rules win, so a
+specific rule can follow a broad one. Seeded once with `rules.py seed`; after
+that it is just rows in the `rule` table and you edit them like any other.
 
 Categories are deliberately narrow. "Eating out" hides the difference between a
 $4 coffee and a $60 dinner, and that difference is the point.
@@ -27,6 +28,8 @@ SEED = [
                     r"|MELBOURNE CENTRAL NOMI|ELJANNAH|NICOSIA TURKISH|KATA KITA"),
     ("Cafes", r"STARBUCKS|STANDING ROOM COFFEE|CAFECOMMERCIO|CAFE COMMERCIO|AMBER CAFE"
               r"|HARERUYA PANTRY|COSMOS - CANTEEN|BOOST JUICE|BOOST MC"),
+    # "LS HOUSE OF CARDS ESPR PARKVILLE" is an espresso bar, not a homewares shop.
+    ("Cafes", r"HOUSE OF CARDS"),
     ("Bubble tea and dessert", r"GONG ?CHA|SHARETEA|TEA WHITE|TOPTEA|HEYTEA|YO-CHI|PICCOLINA"
                                r"|HOMM DESSERT|DESSERT STORY|TRIO PASTRY|KC CHA"),
     ("Alcohol and bottle shops", r"\bBWS\b|DAN MURPHY|LIQUORLAND|FIRST CHOICE LIQUOR"
@@ -53,7 +56,6 @@ SEED = [
     # ---- shopping ----
     ("Clothing", r"UNIQLO|H&M|COTTON ON|MYER|DAVID JONES|GLUE STORE|CULTURE KINGS"),
     ("Electronics", r"JB HI ?FI|OFFICEWORKS|APPLE STORE|MWAVE|SCORPTEC|CENTRE ?COM"),
-    # "LS HOUSE OF CARDS ESPR PARKVILLE" is an espresso bar, not a homewares shop.
     ("Homewares", r"\bIKEA\b|\bKMART\b|BIG W|TARGET AUS|DAISO"),
     ("Online shopping", r"\bETSY\b|EBAY|AMAZON MKTPLACE|ALIEXPRESS|TEMU|WISH GIFT CARD"),
 
@@ -93,6 +95,22 @@ SEED = [
     # whole withdrawals out of Cash withdrawals and into fees.
     ("Bank fees", r"ATM TRANSACTION FEE|ACCOUNT SERVICE FEE"
                   r"|MONTHLY ACCOUNT FEE|DISHONOUR FEE"),
-    # Withheld from interest income. It is a tax, not a bank's charge.
-    ("Tax", r"RESIDENT WITHHOLD TAX|AUSTRALIAN TAXATION|TRANSFER FROM ATO"),
+    # Withheld from interest income, or paid to a tax office. A tax, not a bank's
+    # charge, and "PAYMENT TO INLAND REVENUE" is not paying a person.
+    ("Tax", r"RESIDENT WITHHOLD TAX|AUSTRALIAN TAXATION|TRANSFER FROM ATO|INLAND REVENUE"),
+
+    # ---- money in ----
+    ("Salary", r"^PAY/SALARY FROM "),
+
+    # ---- wording that also sets the type ----
+    # Money into a term deposit and back out is a transfer, not spending or
+    # income: the deposit is still yours. Interest on it is income. Westpac
+    # names no destination on the way in, which is what separates it from
+    # "WITHDRAWAL MOBILE <ref> TFR Westpac Cho", an ordinary transfer.
+    ("Term deposit", r"^WITHDRAWAL ONLINE \d+ TFR\s*$", "transfer"),     # Westpac, money in
+    ("Term deposit", r"PRINCIPAL PAID ON .*TERM DEPOSIT", "transfer"),   # Westpac, principal back
+    ("Term deposit", r"^DETAILS ADVISED SEPARATELY\s*$", "transfer"),    # ANZ, money in
+    ("Term deposit", r"^PRINCIPAL TRANSFERRED FROM", "transfer"),        # ANZ, principal back
+    ("Interest", r"INTEREST PAID ON .*TERM DEPOSIT|^CREDIT INTEREST FROM|^CREDIT INTEREST PAID"
+                 r"|^BONUS CREDIT INTEREST PAID|^INTEREST PAID", "income"),
 ]

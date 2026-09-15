@@ -162,6 +162,12 @@ def _adjacent(end, start):
 
 PLACEHOLDER_REFERENCE = re.compile(r"^(\d)\1*$")   # 0000000 and friends
 TRANSFER_WINDOW_DAYS = 7
+# The row's counterparty is an account we hold. Same bank only: account numbers
+# are not unique across banks, so a Westpac number could otherwise match the
+# tail of an ANZ counterparty.
+HELD_COUNTERPARTY = (
+    "EXISTS (SELECT 1 FROM account mine JOIN account holder ON holder.id = txn.account_id"
+    " WHERE mine.number = txn.counterparty AND mine.bank_id = holder.bank_id)")
 
 
 def match_by_reference(conn):
@@ -171,6 +177,10 @@ def match_by_reference(conn):
     evidence on its own, so a pair must also sit in one bank, within a week, and
     carry opposite amounts. Without those guards an invoice number and a refund
     number that happen to match would be netted out of your spending silently.
+
+    ANZ Plus sometimes reuses a reference a year or more later, so one number
+    can cover several transfers. A debit pairs with the one credit that fits it,
+    as long as no other debit fits that credit too.
     """
     rows = conn.execute(
         "SELECT t.id, t.account_id, t.date, t.amount, t.reference, a.bank_id"
@@ -182,27 +192,31 @@ def match_by_reference(conn):
             continue
         groups[(row["bank_id"], row["reference"])].append(row)
 
+    def fits(source, target):
+        gap = abs((date.fromisoformat(source["date"]) - date.fromisoformat(target["date"])).days)
+        return (source["amount"] < 0 and target["amount"] == -source["amount"]
+                and source["account_id"] != target["account_id"] and gap <= TRANSFER_WINDOW_DAYS)
+
     matched = 0
     for legs in groups.values():
-        if len(legs) != 2:
-            continue
-        a, b = legs
-        if a["account_id"] == b["account_id"] or a["amount"] != -b["amount"]:
-            continue
-        gap = abs((date.fromisoformat(a["date"]) - date.fromisoformat(b["date"])).days)
-        if gap > TRANSFER_WINDOW_DAYS:
-            continue
-        source, target = (a, b) if a["amount"] < 0 else (b, a)
-        changed = conn.execute(
-            "INSERT OR IGNORE INTO transfer(from_txn_id, to_txn_id, method, confirmed)"
-            " VALUES (?,?,'reference',1)", (source["id"], target["id"])).rowcount
-        matched += changed
+        for source in legs:
+            targets = [leg for leg in legs if fits(source, leg)]
+            if len(targets) != 1 or sum(fits(leg, targets[0]) for leg in legs) != 1:
+                continue
+            matched += conn.execute(
+                "INSERT OR IGNORE INTO transfer(from_txn_id, to_txn_id, method, confirmed)"
+                " VALUES (?,?,'reference',1)", (source["id"], targets[0]["id"])).rowcount
     return matched
 
 
 # A card purchase, ATM withdrawal or interest posting is never one leg of a
 # transfer between your own accounts, whatever the amount happens to match.
 NOT_A_TRANSFER = re.compile(r"VISA DEBIT|EFTPOS|\bATM\b|INTEREST", re.I)
+TRANSFER_WORDING = re.compile(r"\bTFR\b|\bTRANSFER\b|FUNDS TFER", re.I)
+# Where a payment prints the other side's name: who a debit paid, and who a
+# credit came from. ANZ Plus, ANZ, then Westpac's Osko wording.
+PAYEE = re.compile(r"^PAYMENT TO |BANKING PAYMENT \d+ TO |^WITHDRAWAL-OSKO PAYMENT \d+ ", re.I)
+PAYER = re.compile(r"^PAYMENT FROM |^DEPOSIT-OSKO PAYMENT \d+ ", re.I)
 SELF_TRANSFER_WINDOW = 3
 
 
@@ -210,38 +224,59 @@ def match_by_amount(conn):
     """Pair a debit in one of your accounts with the credit in another.
 
     Banks outside ANZ share no reference between the two legs, so the amount
-    is the only link. That is weak evidence in general, but not here: both
-    ends are accounts you hold, so the money demonstrably never left. Leaving
-    these unpaired is what makes spending look roughly twice its real size.
+    is the main link. Leaving these unpaired is what makes spending look
+    roughly twice its real size. But an amount alone proves nothing: a friend
+    paying you $300 two days after an unrelated $300 bill would pair. So the
+    wording has to back the pair up too (see `evidence`).
 
     Only conclusive pairs are linked: exact opposite amounts, within a few
-    days, neither side a card purchase, and exactly one possible partner. Any
-    amount with more than one candidate is left for `review.py`.
+    days, neither side a card purchase, one best credit for the debit, and no
+    rival debit that has nowhere else to go. Anything else is left for
+    `review.py`.
 
     Returns (linked, ambiguous).
     """
+    aliases = owner_aliases(conn)
+    # Pairs you turned down in review.py. Only that combination is ruled out,
+    # so each leg can still pair with its real partner.
+    rejected = {(row["from_txn_id"], row["to_txn_id"]) for row in conn.execute(
+        "SELECT from_txn_id, to_txn_id FROM transfer WHERE confirmed = 0")}
     total = 0
     while True:
-        linked, ambiguous = _match_amount_pass(conn)
+        linked, ambiguous = _match_amount_pass(conn, aliases, rejected)
         total += linked
         if not linked:
             return total, ambiguous
 
 
-def _match_amount_pass(conn):
+def _match_amount_pass(conn, aliases, rejected):
     """One sweep. Linking a pair takes both rows out of the pool, which can
     leave a previously ambiguous debit with a single candidate, so the caller
     repeats this until it stops finding anything."""
-    linked_ids = {i for row in conn.execute("SELECT from_txn_id, to_txn_id FROM transfer")
-                  for i in (row["from_txn_id"], row["to_txn_id"])}
-    rows = [r for r in conn.execute(
+    # The pool comes from the data, not from stored types, so loading every
+    # file in one run pairs the same rows as loading them over several. A row
+    # whose type is already settled, by a held counterparty, a typed rule or
+    # your own decision, is not up for pairing.
+    rows = conn.execute(
         "SELECT id, account_id, date, amount, description FROM txn"
-        " WHERE type IN ('income', 'expense')") if r["id"] not in linked_ids]
+        " WHERE id NOT IN (SELECT from_txn_id FROM transfer WHERE confirmed = 1"
+        "                  UNION SELECT to_txn_id FROM transfer WHERE confirmed = 1)"
+        "   AND id NOT IN (SELECT txn_id FROM manual_type)"
+        f"  AND NOT {HELD_COUNTERPARTY}"
+        "   AND NOT EXISTS (SELECT 1 FROM rule WHERE rule.type IS NOT NULL"
+        "                   AND txn.description REGEXP rule.pattern)").fetchall()
 
     by_amount = defaultdict(list)
     for row in rows:
         if not NOT_A_TRANSFER.search(row["description"]):
             by_amount[abs(row["amount"])].append(row)
+
+    def strength(debit, credit):
+        gap = abs((date.fromisoformat(credit["date"]) - date.fromisoformat(debit["date"])).days)
+        if debit["account_id"] == credit["account_id"] or gap > SELF_TRANSFER_WINDOW \
+                or (debit["id"], credit["id"]) in rejected:
+            return 0
+        return evidence(debit["description"], credit["description"], aliases)
 
     used, linked, ambiguous = set(), 0, 0
     for group in by_amount.values():
@@ -250,22 +285,72 @@ def _match_amount_pass(conn):
         for debit in debits:
             if debit["id"] in used:
                 continue
-            options = [c for c in credits
-                       if c["id"] not in used and c["account_id"] != debit["account_id"]
-                       and abs((date.fromisoformat(c["date"])
-                                - date.fromisoformat(debit["date"])).days) <= SELF_TRANSFER_WINDOW]
+            scored = [(strength(debit, c), c) for c in credits if c["id"] not in used]
+            best = max((score for score, _ in scored), default=0)
+            if not best:
+                continue
+            options = [c for score, c in scored if score == best]
             if len(options) > 1 and interchangeable(options):
                 options = options[:1]
             if len(options) != 1:
-                ambiguous += len(options) > 1
+                ambiguous += 1
                 continue
             credit = options[0]
+            # The same question from the credit's side. A rival is another
+            # debit that fits this credit at least as well. The pair is safe
+            # only when every rival has another credit that fits it as well,
+            # and no third debit wants that credit as much. Otherwise which
+            # pair links would depend on row order, so the credit is left for
+            # review: a payment to a relative must not take the credit your own
+            # transfer produced. Two equal transfers a few days apart still link.
+            rivals = [d for d in debits if d["id"] not in used and not interchangeable([debit, d])
+                      and strength(d, credit) >= best]
+            others = [c for c in credits if c["id"] not in used and c["id"] != credit["id"]]
+
+            def elsewhere(rival):
+                return any(strength(rival, c) >= strength(rival, credit) and not any(
+                    strength(d, c) >= strength(rival, c) for d in debits
+                    if d["id"] not in used and d["id"] not in (rival["id"], debit["id"]))
+                    for c in others)
+
+            if not all(elsewhere(rival) for rival in rivals):
+                ambiguous += 1
+                continue
             used.update((debit["id"], credit["id"]))
             conn.execute(
                 "INSERT OR IGNORE INTO transfer(from_txn_id, to_txn_id, method, confirmed)"
                 " VALUES (?,?,'amount',1)", (debit["id"], credit["id"]))
             linked += 1
     return linked, ambiguous
+
+
+def evidence(debit, credit, aliases):
+    """How strongly two descriptions say the money stayed yours: 2, 1 or 0.
+
+    2 when both legs use transfer wording, or when the name the debit paid is
+    the name the credit came from ("PAYMENT TO A SMITH" and "PAYMENT FROM MR A
+    SMITH"). 1 when only one leg uses transfer wording or names you. 0 when
+    neither does, and no pair is made. A 1 only wins where no 2 competes.
+    """
+    payee, payer = _name(debit, PAYEE), _name(credit, PAYER)
+    if (TRANSFER_WORDING.search(debit) and TRANSFER_WORDING.search(credit)) \
+            or (payee and payer and (payee <= payer or payer <= payee)):
+        return 2
+    return int(any(TRANSFER_WORDING.search(text) or names_owner(text, aliases)
+                   for text in (debit, credit)))
+
+
+def _name(description, wording):
+    """The words of the name after a payment's wording, or an empty set.
+
+    The name stops at a reference, a date or an effective-date note, so
+    "PAYMENT TO A SMITH #123 Effective Date 01/02/2025" gives {A, SMITH}.
+    """
+    found = wording.search(description)
+    if not found:
+        return frozenset()
+    name = re.split(r"#|\d|EFFECTIVE DATE", description[found.end():], maxsplit=1, flags=re.I)[0]
+    return frozenset(re.findall(r"[A-Z]+", name.upper()))
 
 
 def interchangeable(options):
@@ -284,7 +369,7 @@ def interchangeable(options):
 
 
 def reclassify(conn):
-    """Set every transaction's type from the whole picture, not row by row.
+    """Set every transaction's type, then its category, from the whole picture.
 
     Run after loading, so the answer does not depend on file order. A leg is
     only a transfer when its counterparty is an account we actually hold, or
@@ -293,12 +378,7 @@ def reclassify(conn):
     have no statements for is income until you confirm otherwise.
     """
     conn.execute("UPDATE txn SET type = CASE WHEN amount > 0 THEN 'income' ELSE 'expense' END")
-    # Same bank only. Account numbers are not unique across banks, so a Westpac
-    # number could otherwise match the tail of an ANZ counterparty.
-    conn.execute(
-        "UPDATE txn SET type = 'transfer' WHERE EXISTS ("
-        "  SELECT 1 FROM account mine JOIN account holder ON holder.id = txn.account_id"
-        "  WHERE mine.number = txn.counterparty AND mine.bank_id = holder.bank_id)")
+    conn.execute(f"UPDATE txn SET type = 'transfer' WHERE {HELD_COUNTERPARTY}")
     conn.execute(
         "UPDATE txn SET type = 'transfer' WHERE id IN"
         " (SELECT from_txn_id FROM transfer WHERE confirmed = 1"
@@ -306,32 +386,37 @@ def reclassify(conn):
     # Rules can force a type as well as a category: a bank's own wording for
     # "this went into a term deposit" is knowable, and should not need tagging
     # by hand every time new statements arrive.
-    apply_rules(conn)
-    # Your own decisions go last, so nothing automatic can undo them.
-    conn.execute("UPDATE txn SET type = (SELECT type FROM manual_type WHERE txn_id = txn.id)"
-                 " WHERE id IN (SELECT txn_id FROM manual_type)")
-
-
-def apply_rules(conn):
-    """Label transactions by matching their description against your patterns.
-
-    A category says where money came from or went, which `type` cannot. Salary
-    and a transfer from your parents are both income, and worth telling apart.
-
-    Rules run in the order they were added and the last match wins, so a broad
-    rule can be written first and narrowed by a later one. A rule may also set
-    `type`, for wording whose meaning the bank has already settled: money going
-    into a term deposit is a transfer, not spending, whoever imports it.
-    """
-    conn.execute("UPDATE txn SET category = NULL")
-    labelled = 0
-    for rule in conn.execute("SELECT pattern, category, type FROM rule ORDER BY id"):
-        labelled += conn.execute("UPDATE txn SET category = ? WHERE description REGEXP ?",
-                                 (rule["category"], rule["pattern"])).rowcount
+    rules = conn.execute("SELECT pattern, category, type FROM rule ORDER BY id").fetchall()
+    for rule in rules:
         if rule["type"]:
             conn.execute("UPDATE txn SET type = ? WHERE description REGEXP ?",
                          (rule["type"], rule["pattern"]))
-    return labelled
+    # Your own decisions go last, so nothing automatic can undo them.
+    conn.execute("UPDATE txn SET type = (SELECT type FROM manual_type WHERE txn_id = txn.id)"
+                 " WHERE id IN (SELECT txn_id FROM manual_type)")
+    # A pair only nets out while both legs are transfers. If your decision or a
+    # typed rule made one leg income or spending, the other leg is no longer
+    # half of a transfer, and left as one it would count nowhere. So it takes
+    # its own sign too, unless you typed that leg yourself.
+    conn.execute(
+        "UPDATE txn SET type = CASE WHEN amount > 0 THEN 'income' ELSE 'expense' END"
+        " WHERE type = 'transfer' AND id NOT IN (SELECT txn_id FROM manual_type) AND id IN"
+        " (SELECT p.from_txn_id FROM transfer p JOIN txn leg ON leg.id = p.to_txn_id"
+        "   WHERE p.confirmed = 1 AND leg.type != 'transfer'"
+        "  UNION SELECT p.to_txn_id FROM transfer p JOIN txn leg ON leg.id = p.from_txn_id"
+        "   WHERE p.confirmed = 1 AND leg.type != 'transfer')")
+
+    # Categories come last, once types are final. A category says where money
+    # came from or went, which `type` cannot: salary and money from your
+    # parents are both income. The last matching rule wins, so a broad rule can
+    # come first and a later one narrow it. A plain rule skips transfers, since
+    # money moved between your own accounts was neither earned nor spent. A
+    # rule that sets `type` still labels them: "Term deposit" is what they are.
+    conn.execute("UPDATE txn SET category = NULL")
+    for rule in rules:
+        plain = "" if rule["type"] else " AND type != 'transfer'"
+        conn.execute(f"UPDATE txn SET category = ? WHERE description REGEXP ?{plain}",
+                     (rule["category"], rule["pattern"]))
 
 
 def unheld_counterparties(conn):
@@ -342,9 +427,7 @@ def unheld_counterparties(conn):
     """
     return conn.execute(
         "SELECT counterparty, COUNT(*) n, SUM(amount) net FROM txn"
-        " WHERE counterparty IS NOT NULL AND NOT EXISTS ("
-        "  SELECT 1 FROM account mine JOIN account holder ON holder.id = txn.account_id"
-        "  WHERE mine.number = txn.counterparty AND mine.bank_id = holder.bank_id)"
+        f" WHERE counterparty IS NOT NULL AND NOT {HELD_COUNTERPARTY}"
         " GROUP BY counterparty ORDER BY COUNT(*) DESC").fetchall()
 
 
@@ -355,24 +438,25 @@ def transfer_candidates(conn, aliases, window_days=3):
     ever suggestions: nothing is netted out of income or spending until you
     confirm it.
     """
-    linked = {i for row in conn.execute("SELECT from_txn_id, to_txn_id FROM transfer")
+    linked = {i for row in conn.execute(
+        "SELECT from_txn_id, to_txn_id FROM transfer WHERE confirmed = 1")
               for i in (row["from_txn_id"], row["to_txn_id"])}
+    # A pair you turned down is not offered again. Each leg still can be.
+    rejected = {(row["from_txn_id"], row["to_txn_id"]) for row in conn.execute(
+        "SELECT from_txn_id, to_txn_id FROM transfer WHERE confirmed = 0")}
     rows = [r for r in conn.execute(
         "SELECT t.id, t.account_id, t.date, t.amount, t.description, a.name, a.number"
         " FROM txn t JOIN account a ON a.id = t.account_id WHERE t.type != 'transfer'")
         if r["id"] not in linked]
 
-    def mentions_owner(text):
-        words = set(re.findall(r"[A-Za-z]+", text.upper()))
-        return any(alias <= words for alias in aliases)
-
-    credits = [r for r in rows if r["amount"] > 0 and mentions_owner(r["description"])]
-    debits = [r for r in rows if r["amount"] < 0 and mentions_owner(r["description"])]
+    credits = [r for r in rows if r["amount"] > 0 and names_owner(r["description"], aliases)]
+    debits = [r for r in rows if r["amount"] < 0 and names_owner(r["description"], aliases)]
     used, candidates = set(), []
     for credit in credits:
         best = None
         for debit in debits:
-            if debit["id"] in used or debit["account_id"] == credit["account_id"]:
+            if debit["id"] in used or debit["account_id"] == credit["account_id"] \
+                    or (debit["id"], credit["id"]) in rejected:
                 continue
             if debit["amount"] != -credit["amount"]:
                 continue
@@ -429,3 +513,9 @@ def owner_aliases(conn):
         if len(words) >= 2:
             aliases.add(words)
     return aliases
+
+
+def names_owner(text, aliases):
+    """True when a description carries one of the account holder's names."""
+    words = set(re.findall(r"[A-Za-z]+", text.upper()))
+    return any(alias <= words for alias in aliases)

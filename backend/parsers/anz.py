@@ -143,9 +143,15 @@ def _parse_pdf(path) -> Document:
                       else -cents(cells["Withdrawals"]))
             description = " ".join(pending + words)
             pending = []
-            after = transactions[-1].date if transactions and not is_report else None
-            when = resolve_year(int(day_month[1]), MONTHS[day_month[2].lower()],
-                                start, end, after)
+            day, month = int(day_month[1]), MONTHS[day_month[2].lower()]
+            previous = transactions[-1].date if transactions else None
+            # A statement prints oldest first, so the row above bounds this
+            # date from below. A report prints newest first, so it bounds it
+            # from above, and the period's end bounds the first row.
+            if is_report:
+                when = resolve_year(day, month, start, end, before=previous or end)
+            else:
+                when = resolve_year(day, month, start, end, after=previous)
             transactions.append(Transaction(
                 date=when, description=description, amount=amount,
                 balance=cents(cells["Balance"]) if "Balance" in cells else None))

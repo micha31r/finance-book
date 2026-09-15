@@ -4,17 +4,22 @@ The important property here is idempotency. Re-running the same file, or a
 file that overlaps one already loaded, must leave the database unchanged.
 That rests on the unique key for a transaction:
 
-    (account, date, amount, description, occurrence)
+    (account, date, amount, match_key, occurrence)
 
-The occurrence counter is what makes it safe. Real statements contain genuinely
+match_key is the description with case, spacing and a trailing EFFECTIVE DATE
+ignored, so a statement and a CSV export of one transaction share a key. The
+occurrence counter is what makes it safe. Real statements contain genuinely
 identical transactions on the same day (four $5.00 EFTPOS charges at the same
 shop, for example), so hashing the content alone would silently merge them.
 """
+import functools
 import re
+import re._parser as sre_parse
 import sqlite3
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+from re._constants import BRANCH, MAX_REPEAT, MIN_REPEAT
 
 from parsers.shared.model import RANK
 from parsers.shared.money import match_key
@@ -111,25 +116,67 @@ CREATE INDEX IF NOT EXISTS txn_reference ON txn(reference);
 """
 
 
+def _nodes(items):
+    """Every (op, argument) in a parsed pattern, at any depth."""
+    for op, av in items:
+        yield op, av
+        # An atomic group, (?>...), holds its body directly instead of in a tuple.
+        for part in av if isinstance(av, (tuple, list)) else [av]:
+            subs = part if isinstance(part, list) else [part]
+            for sub in subs:
+                if isinstance(sub, sre_parse.SubPattern):
+                    yield from _nodes(sub)
+
+
+def risky_pattern(pattern):
+    """Why a rule pattern could hang the app, or None when it is safe to run.
+
+    Python's re backtracks. A repeated group holding a variable-length repeat,
+    like (\\w+ ?)+, tries every way of splitting a word and never finishes on
+    an ordinary 40-character description. Alternatives that can match the same
+    text, like (a|aa)+, do the same. While it runs it holds the whole server.
+    So such a pattern is refused before it is saved, and never run.
+    """
+    try:
+        tree = sre_parse.parse(pattern)
+    except re.error as error:
+        return f"not a valid regular expression: {error}"
+    repeats = (MAX_REPEAT, MIN_REPEAT)
+    for op, av in _nodes(tree):
+        if op in repeats and av[1] > 1:
+            inside = list(_nodes(av[2]))
+            if any(o in repeats and a[0] != a[1] for o, a in inside):
+                return "a repeated group that holds another repeat, like (\\w+ ?)+, can run for hours"
+            # Which alternatives overlap is hard to tell, so all are refused. One
+            # character each, like (a|b), parses as a character class and passes.
+            if any(o == BRANCH for o, _ in inside):
+                return "a repeated group that holds alternatives, like (a|aa)+, can run for hours"
+    # Open-ended repeats, like the three in .*A.*B.*, try every way of sharing the
+    # text between them. Two are fine. Three took minutes over all descriptions.
+    # An optional character, like " ?", repeats at most once and is not counted.
+    if sum(1 for op, av in _nodes(tree) if op in repeats and av[1] > 1 and av[0] != av[1]) > 2:
+        return "more than two open-ended repeats, like .*A.*B.*, can run for minutes"
+    return None
+
+
+@functools.lru_cache(maxsize=None)
+def _rule_regex(pattern):
+    return None if risky_pattern(pattern) else re.compile(pattern, re.I)
+
+
+def regexp(pattern, text):
+    """SQLite's REGEXP. A risky pattern matches nothing instead of hanging."""
+    compiled = _rule_regex(pattern)
+    return compiled is not None and compiled.search(text or "") is not None
+
+
 def connect(path=DEFAULT_PATH):
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     # Rules are regexes, and more than one query needs to run them.
-    conn.create_function("regexp", 2,
-                         lambda pattern, text: bool(re.search(pattern, text or "", re.I)))
+    conn.create_function("regexp", 2, regexp)
     conn.executescript(SCHEMA)
-    # Columns added after a database already existed.
-    have = {r["name"] for r in conn.execute("PRAGMA table_info(txn)")}
-    if "sequence" not in have:
-        conn.execute("ALTER TABLE txn ADD COLUMN sequence INTEGER NOT NULL DEFAULT 0")
-    ruled = {r["name"] for r in conn.execute("PRAGMA table_info(rule)")}
-    if "type" not in ruled:
-        conn.execute("ALTER TABLE rule ADD COLUMN type TEXT")
-    held = {r["name"] for r in conn.execute("PRAGMA table_info(holding)")}
-    if "kind" not in held:
-        conn.execute("ALTER TABLE holding ADD COLUMN kind TEXT NOT NULL"
-                     " DEFAULT 'term deposit'")
     return conn
 
 
@@ -178,13 +225,22 @@ def document_id(conn, acct_id, doc):
 def write_transactions(conn, acct_id, doc_id, doc, verified):
     """Insert new rows, upgrade rows from weaker sources, leave the rest alone.
 
+    A statement is complete and balance-checked for its period, so it replaces
+    every provisional row dated inside it, whichever file arrives first. The
+    keys alone would miss some: an ANZ Plus statement ends a card purchase with
+    "Effective Date dd/mm/yyyy" and a Transaction List never does.
+
     Returns (inserted, upgraded, unchanged, removed).
     """
     counts = Counter()
     inserted = upgraded = unchanged = 0
     seen_ids = []
+    statements = conn.execute(
+        "SELECT period_start, period_end FROM document WHERE account_id = ? AND kind = 'statement'",
+        (acct_id,)).fetchall() if doc.provisional else []
     for position, txn in enumerate(doc.transactions):
-        key = (acct_id, txn.date.isoformat(), txn.amount, match_key(txn.description))
+        day = txn.date.isoformat()
+        key = (acct_id, day, txn.amount, match_key(txn.description))
         counts[key] += 1
         full = key + (counts[key],)
         row = conn.execute(
@@ -193,7 +249,9 @@ def write_transactions(conn, acct_id, doc_id, doc, verified):
             " WHERE txn.account_id=? AND txn.date=? AND txn.amount=? AND txn.match_key=?"
             " AND txn.occurrence=?", full).fetchone()
         effective = txn.effective_date.isoformat() if txn.effective_date else None
-        if row is None:
+        if row is None and any(s["period_start"] <= day <= s["period_end"] for s in statements):
+            unchanged += 1      # a statement already has it, maybe spelled differently
+        elif row is None:
             new_id = conn.execute(
                 "INSERT INTO txn(account_id, date, amount, match_key, occurrence, description,"
                 " document_id, effective_date, balance, counterparty, reference,"
@@ -238,4 +296,13 @@ def write_transactions(conn, acct_id, doc_id, doc, verified):
         sql = f"DELETE FROM txn WHERE document_id = ? AND id NOT IN ({placeholders})" \
             if seen_ids else "DELETE FROM txn WHERE document_id = ?"
         removed = conn.execute(sql, [doc_id, *seen_ids]).rowcount
+    if doc.kind == "statement":
+        # Rows this statement matched are no longer provisional, so any left in
+        # its period are a listing's copies or items that never posted. Their
+        # transfer links and manual types are deleted with them. Ingest pairs
+        # the new rows again by reference and amount, but a cross-bank link or
+        # a manual type has to be set again.
+        removed += conn.execute(
+            "DELETE FROM txn WHERE account_id = ? AND provisional = 1 AND date BETWEEN ? AND ?",
+            (acct_id, doc.period_start.isoformat(), doc.period_end.isoformat())).rowcount
     return inserted, upgraded, unchanged, removed
