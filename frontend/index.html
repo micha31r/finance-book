@@ -351,7 +351,10 @@
      redraws the body only, leaves it alone. The form wraps: one line at
      1440, two below that. Spread over the five columns it squeezed
      Description to 27px at 1024. */
-  .tcap .addbtn { padding: 0 2px; color: var(--ink-faint); font-family: var(--mono); font-size: 12px; }
+  /* Centred like the search icon: on the strip's baseline the smaller mono
+     glyphs sat visibly low beside the title. */
+  .tcap .addbtn { align-self: center; padding: 0 2px; color: var(--ink-faint);
+                  font-family: var(--mono); font-size: 12px; }
   .tcap .addbtn:hover { background: none; color: var(--ink); }
   tr.add td { white-space: normal; padding: 6px 10px; border-bottom: 1px solid var(--line);
               background: var(--panel); }
