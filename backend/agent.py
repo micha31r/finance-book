@@ -305,13 +305,14 @@ async def read_rows_tool(args):
       {"type": "object",
        "properties": {
            "view": {"type": "string",
-                    "description": "'all', 'analysis', 'holdings' (the Term deposits tab), "
+                    "description": "'all', 'analysis', 'cashflow', 'holdings' (the Term deposits tab), "
                                    "'investments', 'rules', or an account id"},
            "year": {"type": "string",
                     "description": "'2026', or 'all'. Account views only: it picks a calendar "
                                    "year and clears the date range"},
            "period": {"type": "string",
-                      "description": "30d, 3m, 6m, 12m, ytd or all (spending analysis). "
+                      "description": "30d, 3m, 6m, 12m, ytd or all (spending analysis); 30d, 3m, 6m, 12m "
+                                     "or plans (cashflow, how far ahead). "
                                      "Use period or from/to: setting one clears the other"},
            "from": {"type": "string",
                     "description": "first day of the date range, YYYY-MM-DD, inclusive. The "
@@ -408,7 +409,9 @@ rather than guessing. Say plainly when the data cannot answer something.
 
 When your answer is about something the page can show, call `set_view` so they
 are looking at it. The spending analysis page shows income, spending and net for
-its period. Account views show money in, money out and net for a year or a date
+its period. The cashflow page shows free cash day by day, the bank balances and
+then the projection with every what-if, for a period ahead. Account views show
+money in, money out and net for a year or a date
 range. To show only some categories, `hide` all the others. The page counts
 what-ifs in its tables and totals while they are shown, which they are by
 default. When your figure leaves them out, pass `whatif` '0' so the page agrees

@@ -212,7 +212,7 @@
   .fold:hover svg { color: var(--ink); }
   .fold[aria-expanded="true"] svg { transform: rotate(90deg); }
   /* The strip's own rule would double the box's border on a collapsed table. */
-  .tablewrap:has(> table[hidden]) .tcap { border-bottom: 0; }
+  table:has(> tbody[hidden]) .tcap { border-bottom: 0; }
   /* No taller than the account name beside it, so opening the search does not
      make the strip grow. */
   .tcap .find {
@@ -235,17 +235,23 @@
     text-align: left; font-family: var(--mono); font-size: 11px;
     text-transform: uppercase; letter-spacing: .08em;
     color: var(--ink-faint); font-weight: 400; padding: 5px 10px;
-    border-bottom: 1px solid var(--line);
-    position: sticky; top: 0; background: var(--panel);
+    border-bottom: 1px solid var(--line); background: var(--panel);
   }
-  /* Column headers stick below the chat bar, and in the drill-down below its
-     57px header: the 30px close button, 13px padding above and below, and a
-     1px rule. Not at 600px and under, where the table scrolls in its own box
-     and an offset would push the header down over the first row. */
+  /* The whole head sticks: the caption strip with its search and add buttons,
+     the add form when it is open, and the column headers. Below the chat bar,
+     and in the drill-down below its 57px header: the 30px close button, 13px
+     padding above and below, and a 1px rule. Not at 600px and under, where
+     the table scrolls in its own box and an offset would push the head down
+     over the first row. */
+  thead { position: sticky; top: 0; z-index: 2; }
   @media (width > 600px) {
-    th { top: var(--bar); }
-    #drill th { top: 57px; }
+    thead { top: var(--bar); }
+    #drill thead { top: 57px; }
   }
+  /* The caption strip is the head's first row, so it sticks with the columns.
+     Its cell is a td: a th would print the strip faint, in the column-header
+     styling, and read as the header of every cell below. */
+  tr.cap td { padding: 0; border-bottom: 0; }
   td { padding: 4px 10px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
   /* One transaction, one row. Date, Type, Amount and Balance each settle at the
      width their own content needs, no narrower, so they never truncate. The
@@ -256,7 +262,10 @@
      the browser measures the other columns, then `width: 100%` claims all the
      slack. Being the only constrained column, it is also the only one that
      truncates; hovering shows the full text. */
-  table.rows { table-layout: auto; width: 100%; }
+  /* Separate borders, no spacing: with collapsed borders the line under a
+     sticky head stays where the row was laid out, and a sliver of the rows
+     scrolling under it shows through. */
+  table.rows { table-layout: auto; width: 100%; border-collapse: separate; border-spacing: 0; }
   table.rows td, table.rows th { white-space: nowrap; }
   table.rows td.desc, table.rows th.desc {
     width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis;
@@ -336,16 +345,16 @@
   tr.add [name="category"] { width: 7rem; }
   /* Dimmed while the server has it. The reload draws the row afresh. */
   td[aria-busy="true"], tr[aria-busy="true"] td { opacity: .5; }
-  /* The add row is the table's foot, which a search leaves alone: it redraws
-     the body only. At rest it is one faint "+ add". */
-  tfoot td { border-top: 1px solid var(--rule); border-bottom: 0; }
-  tr.add .addbtn { padding: 0; color: var(--ink-faint); }
-  tr.add .addbtn:hover { background: none; color: var(--ink); }
-  /* Open, the add row is one cell across the table holding a form that
-     wraps: one line at 1440, two below that. Spread over the five columns it
-     squeezed Description to 27px at 1024, since every other column was
-     widened by its control and Description alone gave way. */
-  tr.add td { white-space: normal; }
+  /* "+ add" sits in the caption strip beside the search button, quiet like
+     it. The form it opens is the head's second row, one cell across the
+     table, so it is on screen at any scroll position, and a search, which
+     redraws the body only, leaves it alone. The form wraps: one line at
+     1440, two below that. Spread over the five columns it squeezed
+     Description to 27px at 1024. */
+  .tcap .addbtn { padding: 0 2px; color: var(--ink-faint); font-family: var(--mono); font-size: 12px; }
+  .tcap .addbtn:hover { background: none; color: var(--ink); }
+  tr.add td { white-space: normal; padding: 6px 10px; border-bottom: 1px solid var(--line);
+              background: var(--panel); }
   tr.add .addform { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
   tr.add .addform [name="description"] { flex: 1 1 14rem; }
   tr.add .addform label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer;
@@ -393,7 +402,7 @@
     overflow-y: auto; overscroll-behavior: contain;
   }
   .drill-head {
-    position: sticky; top: 0; z-index: 1; background: var(--panel);
+    position: sticky; top: 0; z-index: 3; background: var(--panel);   /* above the tables' heads (2) */
     border-bottom: 1px solid var(--line);
     display: flex; align-items: center; gap: 12px; padding: 13px 24px;
   }
@@ -435,15 +444,16 @@
             font: inherit; font-size: 12px; padding: 2px 6px; border-radius: 0; }
   .rowbtn:hover { background: var(--hover); color: var(--ink); }
   /* × on a row entered by hand, in space every date cell reserves, so dates
-     line up whether a row has one or not. Faded out until the row is hovered
-     or the × itself is focused, so the ledger does not fill with buttons.
-     Opacity, not visibility: a hidden button cannot take the focus, so Tab
-     could never reach it. After .rowbtn on purpose: it takes the padding and
-     line height from it. */
+     line up whether a row has one or not. Inline, pulled back into the
+     padding: a positioned cell in the body paints over the sticky head as
+     the table scrolls under it. Faded out until the row is hovered or the ×
+     itself is focused, so the ledger does not fill with buttons. Opacity,
+     not visibility: a hidden button cannot take the focus, so Tab could
+     never reach it. After .rowbtn on purpose: it takes the line height
+     from it. */
   table.rows td.date, table.rows th.date { padding-left: 24px; }
-  table.rows td.date { position: relative; }
-  .del { position: absolute; left: 6px; top: 50%; transform: translateY(-50%);
-         opacity: 0; padding: 0 4px; margin: 0; line-height: 1; }
+  .del { display: inline-block; width: 18px; margin: 0 0 0 -18px; padding: 0;
+         text-align: center; opacity: 0; line-height: 1; vertical-align: middle; }
   tr:hover .del, .del:focus-visible { opacity: 1; }
   /* margin-top:auto pins this to the bottom when the account list is short,
      and lets it scroll away with the list when it is long. */
@@ -626,6 +636,9 @@
      uppercase headers, hover fills. None of that belongs in a chat reply. */
   .said .md-table { overflow-x: auto; }
   .said table { width: auto; border-collapse: collapse; }
+  /* A chat table's box never scrolls, so a sticky head only sat over its
+     first row. */
+  .said thead { position: static; }
   .said th, .said td { position: static; padding: 3px 16px 3px 0; background: none;
                        font: inherit; text-transform: none; letter-spacing: normal;
                        white-space: nowrap; font-variant-numeric: tabular-nums;
@@ -705,6 +718,7 @@
     <div id="investments" hidden></div>
     <div id="rules" hidden></div>
     <div id="analysis" hidden></div>
+    <div id="cashflow" hidden></div>
   </main>
 </div>
 
@@ -864,11 +878,16 @@ function renderSidebar() {
   // have their own items under Setup, so they are not counted here too.
   const all = document.createElement("div");
   all.className = "group";
+  const low = freeCash();     // the lowest the projection goes, for the Cashflow item
   all.innerHTML = `<button data-id="all" aria-current="${state.account === "all"}">
       <span class="name">All accounts</span>
       <span class="bal num">${compact(accountsTotal())}</span></button>
     <button data-id="analysis" aria-current="${state.account === "analysis"}">
-      <span class="name">Spending analysis</span></button>`;
+      <span class="name">Spending analysis</span></button>
+    <button data-id="cashflow" aria-current="${state.account === "cashflow"}">
+      <span class="name">Cashflow</span>
+      <span class="bal num" title="Free cash: the lowest the projection goes in the period">${
+        low ? compact(low.amount) : "—"}</span></button>`;
   nav.append(all);
 
   for (const [bank, list] of Object.entries(banks)) {
@@ -922,8 +941,7 @@ function renderSidebar() {
   // Only the view buttons: the toggle above is a button in the same nav.
   nav.querySelectorAll("button[data-id]").forEach(b => b.onclick = () => {
     const before = state.account;
-    state.account = ["all", "holdings", "investments", "rules", "analysis"]
-      .includes(b.dataset.id) ? b.dataset.id : +b.dataset.id;
+    state.account = b.dataset.id === "all" || TABS.includes(b.dataset.id) ? b.dataset.id : +b.dataset.id;
     // The chosen year or range carries over. renderYears drops a year the new
     // account has no rows for.
     render();
@@ -1204,9 +1222,13 @@ catch { openTables = new Set(); }
 
 function setOpen(wrap, open) {
   wrap.querySelector(".fold").setAttribute("aria-expanded", String(open));
-  wrap.querySelector("table").hidden = !open;
-  // A search cannot run in a table you cannot see.
+  // The head stays: it holds the name, the search and the add button.
+  wrap.querySelector("tbody").hidden = !open;
+  wrap.querySelector("tr.cols").hidden = !open;
+  // A search or an open add form cannot run in a table you cannot see.
   if (!open && !wrap.querySelector(".find").hidden) closeFind(wrap);
+  const adding = wrap.querySelector("tr.add:not([hidden])");
+  if (!open && adding) closeAdd(adding, false);
   // A table drawn collapsed has no rows yet. Its first opening builds them.
   const tbody = wrap.querySelector("tbody");
   if (open && !tbody.children.length) {
@@ -1278,30 +1300,36 @@ function tableMeta(rows) {
 // `fold` is true or false for a table that can collapse, open or collapsed,
 // and left out for one that cannot. A collapsed table gets no rows: setOpen
 // builds them when it opens, so All accounts only draws what is on screen.
-function transactionTable(title, rows, {column = "balance", hideCategory = false, key = "drill", fold} = {}) {
+// `add` puts "+ add" in the caption and an add form row in the head.
+function transactionTable(title, rows, {column = "balance", hideCategory = false, key = "drill", fold, add = false} = {}) {
   const opts = {column, hideCategory};
   tables.set(String(key), {rows, opts});
 
-  return `<div class="tablewrap" data-table="${key}"><div class="tcap">
+  // The caption strip is the head's first row and the add form its second, so
+  // both stick with the column headers at any scroll position.
+  return `<div class="tablewrap" data-table="${key}"><table class="rows">
+    <thead>
+    <tr class="cap"><td colspan="5"><div class="tcap">
       ${fold === undefined ? `<span class="grp">${esc(title)}</span>`
         : `<button class="fold" aria-expanded="${fold}">${CHEVRON}<span class="grp">${esc(title)}</span></button>`}
       <button class="findbtn" aria-label="Search these transactions"
               title="Search these transactions">${SEARCH_ICON}</button>
       <input class="find" type="search" placeholder="Search…" hidden
              aria-label="Search these transactions">
+      ${add ? '<button class="rowbtn addbtn" type="button" title="Add a transaction or a what-if">+ add</button>' : ""}
       <span class="meta">${tableMeta(rows)}</span>
-    </div><table class="rows"${fold === false ? " hidden" : ""}>
+    </div></td></tr>
+    ${add ? '<tr class="add" hidden></tr>' : ""}
     <!-- Only Description is sized, and it is sized to absorb the slack. Every
          other column is left alone so it sits at its own content width. -->
-    <thead><tr>
+    <tr class="cols"${fold === false ? " hidden" : ""}>
       <th class="date">Date</th><th class="desc">Description</th><th class="tags">Type</th>
       <th class="amt r">Amount</th>
       ${column === "account"
         ? '<th class="acct">Account</th>'
         : '<th class="bal r">Balance</th>'}
     </tr></thead>
-    <tbody>${fold === false ? "" : tableBody(rows, opts)}</tbody>
-    ${column === "balance" ? `<tfoot><tr class="add">${ADD_REST}</tr></tfoot>` : ""}
+    <tbody${fold === false ? " hidden" : ""}>${fold === false ? "" : tableBody(rows, opts)}</tbody>
   </table></div>`;
 }
 
@@ -1312,7 +1340,8 @@ function transactionTable(title, rows, {column = "balance", hideCategory = false
 const tableFor = account =>
   transactionTable(`${account.bank} ${account.label}` + (rangeLabel() || state.year ? " · " + periodLabel() : ""),
                    viewRows(account.id),
-                   {key: account.id, fold: state.account === "all" ? openTables.has(String(account.id)) : undefined});
+                   {key: account.id, add: true,
+                    fold: state.account === "all" ? openTables.has(String(account.id)) : undefined});
 
 function renderTables() {
   const out = document.getElementById("tables");
@@ -1534,19 +1563,22 @@ const catOf = t => t.category || "Uncategorised";
 const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
                   + `-${String(d.getDate()).padStart(2, "0")}`;
 
-function monthsAgo(n) {
+// Today moved by whole months, either way. setMonth rolls forward when the
+// target month is shorter: 31 March minus one month lands back in March, so
+// the day is pulled to the last day of the month meant.
+function monthsFrom(n) {
   const now = new Date(), then = new Date();
-  then.setMonth(then.getMonth() - n);
-  // setMonth rolls forward when the target month is shorter: 31 March minus
-  // one month lands back in March. Pull it to the last day of the month meant.
+  then.setMonth(then.getMonth() + n);
   if (then.getDate() !== now.getDate()) then.setDate(0);
   return isoDay(then);
 }
+const monthsAgo = n => monthsFrom(-n);
+const daysAhead = n => { const d = new Date(); d.setDate(d.getDate() + n); return isoDay(d); };
 
 // Measured from today, so "6 months" means the last six months even when the
 // newest statement is a fortnight old.
 const PERIODS = [
-  {key: "30d", label: "30 days",   from: () => { const d = new Date(); d.setDate(d.getDate() - 29); return isoDay(d); }},
+  {key: "30d", label: "30 days",   from: () => daysAhead(-29)},
   {key: "3m",  label: "3 months",  from: () => monthsAgo(3)},
   {key: "6m",  label: "6 months",  from: () => monthsAgo(6)},
   {key: "12m", label: "12 months", from: () => monthsAgo(12)},
@@ -2041,19 +2073,26 @@ function edit(target, t) {
 }
 
 // ---------- adding a row ----------
-// Every ledger table ends with a "+ add" line. Opened, it is one cell across
-// the table holding the inputs. Enter anywhere in it saves; Escape puts
-// "+ add" back. It lives in the table's foot, which a search leaves alone.
-const ADD_REST = '<td></td><td class="desc"><button class="rowbtn addbtn" type="button">+ add</button></td>'
-               + '<td></td><td></td><td></td>';
-
+// "+ add" in a table's caption opens the form row under it: one cell across
+// the table holding the inputs, in the sticky head, so it is in view wherever
+// the page is scrolled. Enter anywhere in it saves; Escape closes it. A table
+// of one account puts the row in that account; one spanning accounts, like
+// the cashflow's, asks which.
 document.addEventListener("click", event => {
   const button = event.target.closest && event.target.closest(".addbtn");
-  if (button) openAdd(button.closest("tr"));
+  if (!button) return;
+  // A collapsed table opens first, or the new row would land out of sight.
+  const wrap = button.closest(".tablewrap");
+  unfold(wrap);
+  openAdd(wrap.querySelector("tr.add"));
 });
 
 function openAdd(row) {
-  row.innerHTML = `<td colspan="5"><div class="addform">
+  const key = row.closest(".tablewrap").dataset.table;
+  const accounts = /^\d+$/.test(key) ? "" : `<select name="account" aria-label="Account">${
+    DATA.accounts.map(a => `<option value="${a.id}">${esc(a.bank)} ${esc(a.label)}</option>`).join("")}</select>`;
+  row.hidden = false;
+  row.innerHTML = `<td colspan="5"><div class="addform">${accounts}
     <input type="date" name="date" value="${isoDay(new Date())}" aria-label="Date">
     <input name="description" maxlength="200" placeholder="Description" aria-label="Description">
     <select name="type" aria-label="Type">${options(TYPES, "automatic")}</select>
@@ -2074,10 +2113,13 @@ function openAdd(row) {
   row.querySelector("[name=description]").focus({preventScroll: true});
 }
 
-function closeAdd(row) {
-  row.innerHTML = ADD_REST;
+// Escape puts the focus back on "+ add". Collapsing the table does not: the
+// chevron has it, and keeps it.
+function closeAdd(row, refocus = true) {
+  row.innerHTML = "";
+  row.hidden = true;
   row.onkeydown = null;
-  row.querySelector(".addbtn").focus();
+  if (refocus) row.closest(".tablewrap").querySelector(".addbtn").focus();
 }
 
 async function submitAdd(row) {
@@ -2086,8 +2128,9 @@ async function submitAdd(row) {
   const amount = cents(value("amount"));
   if (amount === null) return alert(AMOUNT_HINT);
   const repeat = value("repeat");
+  const key = row.closest(".tablewrap").dataset.table;
   const body = {
-    account: +row.closest(".tablewrap").dataset.table,
+    account: +(row.querySelector("[name=account]")?.value ?? key),
     date: value("date"), description: value("description"), amount, type: value("type"),
     category: value("category") || null, whatif: row.querySelector("[name=whatif]").checked,
     repeat, until: repeat === "once" ? null : value("until") || null,
@@ -2104,7 +2147,7 @@ async function submitAdd(row) {
   }
   await reload();
   // reload() rebuilt the table. Focus its "+ add" again, where the row began.
-  document.querySelector(`.tablewrap[data-table="${body.account}"] .addbtn`)?.focus({preventScroll: true});
+  document.querySelector(`.tablewrap[data-table="${key}"] .addbtn`)?.focus({preventScroll: true});
 }
 
 // ---------- deleting a row ----------
@@ -2338,6 +2381,189 @@ function drawAnalysisCharts(rows, ranked) {
   });
 }
 
+// ---------- cashflow ----------
+// Free cash is what the bank accounts hold, day by day: the bank's balances up
+// to today, then the projection with every what-if from today on. Term
+// deposits and investments are not cash, so they stay out.
+const DEFAULT_HORIZON = "3m";
+const cash = {preset: DEFAULT_HORIZON, from: null, to: null};
+
+// "2026-09-22" as a local date. new Date("2026-09-22") is UTC midnight, which
+// is the day before in any zone behind UTC.
+const localDate = s => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const eachDay = (from, to) => {
+  const days = [];
+  for (let d = localDate(from); isoDay(d) <= to; d.setDate(d.getDate() + 1)) days.push(isoDay(d));
+  return days;
+};
+// How far ahead to look. The last runs to the final what-if, or a month
+// when nothing is planned that far.
+const HORIZONS = [
+  {key: "30d",   label: "30 days",   to: () => daysAhead(30)},
+  {key: "3m",    label: "3 months",  to: () => monthsFrom(3)},
+  {key: "6m",    label: "6 months",  to: () => monthsFrom(6)},
+  {key: "12m",   label: "12 months", to: () => monthsFrom(12)},
+  {key: "plans", label: "All plans", to: () => {
+    const last = DATA.transactions.filter(t => t.whatif).map(t => t.date).sort().pop();
+    return last > daysAhead(30) ? last : daysAhead(30);
+  }},
+];
+
+// The days on show. A preset looks ahead from today, with a month of history
+// for context. Typed dates stand on their own; one left blank keeps that end.
+function cashRange() {
+  const preset = HORIZONS.find(h => h.key === cash.preset) || HORIZONS.find(h => h.key === DEFAULT_HORIZON);
+  const from = cash.from || daysAhead(-30), to = cash.to || preset.to();
+  // A To before the From is one day, never no days: an empty period has no
+  // figures to show and would break the page.
+  return {from, to: to < from ? from : to};
+}
+
+// Free cash on each of the days: the sum over the bank accounts of the latest
+// balance on or before that day. Past days are the bank's balances. From
+// today on the export's projected balances carry every what-if, so the same
+// rule gives the projection. An account with no balance yet counts as nothing.
+function cashSeries(days) {
+  const byAccount = new Map();
+  for (const t of DATA.transactions) {
+    if (t.balance === null) continue;
+    if (!byAccount.has(t.account)) byAccount.set(t.account, []);
+    const list = byAccount.get(t.account);
+    // One entry per day: the day's last row holds its closing figure.
+    if (list.length && list[list.length - 1][0] === t.date) list[list.length - 1][1] = t.balance;
+    else list.push([t.date, t.balance]);
+  }
+  const at = new Map(), next = new Map();
+  return days.map(day => {
+    let total = 0;
+    for (const [account, list] of byAccount) {
+      let i = next.get(account) || 0;
+      while (i < list.length && list[i][0] <= day) at.set(account, list[i++][1]);
+      next.set(account, i);
+      total += at.get(account) || 0;
+    }
+    return total;
+  });
+}
+
+// The lowest the projection goes between today and the end of the period:
+// what can be spent now without a plan running the accounts short. Null when
+// the period ends before today.
+function freeCash() {
+  const {from, to} = cashRange();
+  const today = isoDay(new Date());
+  if (to < today) return null;
+  const days = eachDay(from > today ? from : today, to);
+  const series = cashSeries(days);
+  let low = 0;
+  for (let i = 1; i < series.length; i++) if (series[i] < series[low]) low = i;
+  return {amount: series[low], day: days[low]};
+}
+
+const shortDay = day => { const [, m, d] = day.split("-"); return `${+d} ${MONTHS[+m - 1]}`; };
+
+function cashControls() {
+  return `<div class="controls"><div>
+      <div class="caption" style="margin-bottom:6px">Ahead</div>
+      <div class="picker">${HORIZONS.map(h => `<button class="chip horizon" type="button"
+          data-horizon="${h.key}" aria-current="${cash.preset === h.key}">${h.label}</button>`).join("")}</div>
+      <div class="picker" style="margin-top:6px">
+        <label><input type="date" class="cash-from" aria-label="From" value="${cash.from || ""}"></label>
+        <label><input type="date" class="cash-to" aria-label="To" value="${cash.to || ""}"></label>
+      </div></div></div>`;
+}
+
+// As wireControls: each handler ends by focusing the new copy of its control.
+function wireCashControls(root) {
+  root.querySelectorAll(".horizon").forEach(button => button.onclick = () => {
+    cash.preset = button.dataset.horizon;
+    cash.from = cash.to = null;
+    render();
+    root.querySelector(`.horizon[data-horizon="${button.dataset.horizon}"]`).focus();
+  });
+  // Only a real day counts; see wireControls for why.
+  for (const [cls, key] of [["cash-from", "from"], ["cash-to", "to"]])
+    root.querySelectorAll("." + cls).forEach(input => input.onchange = () => {
+      if (input.value && !isDay(input.value)) return;
+      cash[key] = input.value || null;
+      cash.preset = cash.from || cash.to ? null : DEFAULT_HORIZON;
+      render();
+    });
+}
+
+function renderCashflow() {
+  const {from, to} = cashRange();
+  const today = isoDay(new Date());
+  const days = eachDay(from, to);
+  const series = cashSeries(days);
+  const ahead = days.findIndex(d => d >= today);        // -1 when the period is all past
+  const low = freeCash();
+  const plans = DATA.transactions.filter(t => t.whatif && t.date >= from && t.date <= to);
+  // What the projection counts: the export gives a what-if after its account's
+  // balance date a projected balance, and one on or before it none.
+  const coming = plans.filter(t => t.balance !== null);
+  const planned = {in: coming.filter(t => t.amount > 0).reduce((n, t) => n + t.amount, 0),
+                   out: coming.filter(t => t.amount < 0).reduce((n, t) => n - t.amount, 0)};
+  const end = series[series.length - 1];
+  const card = (label, value, cls, note) =>
+    `<div class="card"><div class="caption">${label}</div>
+       <div class="v num ${cls || ""}">${value}</div>
+       ${note ? `<div class="note">${note}</div>` : ""}</div>`;
+  const body = `
+    <div class="cards">
+      ${card("Free cash", low ? money(low.amount) : "—", low ? tone(low.amount) : "",
+             !low ? "the period ends before today"
+             : low.day === today ? "now, and no plan takes it lower" : `lowest on ${dayLabel(low.day)}`)}
+      ${card("In accounts now", money(accountsTotal()), "", "term deposits and investments left out")}
+      ${card("End of period", money(end), tone(end), dayLabel(to))}
+      ${card("Planned in", money(planned.in), "in", `in the projection to ${dayLabel(to)}`)}
+      ${card("Planned out", money(planned.out), "out", `in the projection to ${dayLabel(to)}`)}
+    </div>
+    <div class="panel">
+      <h3>Free cash, day by day</h3>
+      <p>${state.whatif ? "The bank's balances to today, then every what-if from today on, dashed."
+                        : "What-ifs are hidden, so the line is flat from today."}</p>
+      <div class="chartbox"><canvas id="cashChart"></canvas></div>
+    </div>
+    ${transactionTable(`Plans · ${dayLabel(from)} to ${dayLabel(to)}`, plans,
+                       {column: "account", key: "cashflow", add: true})}`;
+
+  const panel = document.getElementById("cashflow");
+  // As renderAnalysis: a date being typed keeps its caret, so only the part
+  // below the controls is redrawn and the chips have their light moved.
+  if (panel.contains(document.activeElement) && document.activeElement.type === "date") {
+    panel.querySelector(".cash-body").innerHTML = body;
+    panel.querySelectorAll(".horizon").forEach(chip =>
+      chip.setAttribute("aria-current", String(cash.preset === chip.dataset.horizon)));
+  } else {
+    panel.innerHTML = `
+    <div class="title"><h2>Cashflow</h2>
+      <span class="sub">what your bank accounts hold, and where the what-ifs take it</span></div>
+    ${cashControls()}
+    <div class="cash-body">${body}</div>`;
+    wireCashControls(panel);
+  }
+
+  const loss = css("--loss");
+  draw("cashChart", {
+    type: "line",
+    data: {labels: days.map(shortDay), datasets: [{
+      label: "Free cash", data: series, borderColor: css("--ink"), backgroundColor: "transparent",
+      borderWidth: 2, tension: 0.25, pointHoverRadius: 4, pointBackgroundColor: css("--accent"),
+      // The projection is dashed, and red wherever it touches below zero. One
+      // dot marks today, where the bank's figures end.
+      segment: {
+        borderDash: c => ahead >= 0 && c.p0DataIndex >= ahead ? [4, 4] : undefined,
+        borderColor: c => c.p0.parsed.y < 0 || c.p1.parsed.y < 0 ? loss : undefined,
+      },
+      pointRadius: c => days[c.dataIndex] === today ? 3 : 0,
+    }]},
+    options: baseOptions({plugins: {legend: {display: false},
+      tooltip: {callbacks: {title: items => dayLabel(days[items[0].dataIndex]),
+                            label: c => money(c.parsed.y)}}}}),
+  });
+}
+
 // ---------- income source rules ----------
 // A category says where money came from, which `type` cannot. Salary and money
 // from your parents are both income, and worth telling apart.
@@ -2493,7 +2719,7 @@ const esc = t => String(t).replace(/[<>&"']/g, c =>
 
 // Where you are and what you have filtered lives in the URL, so a refresh, a
 // bookmark or a link opens the same screen instead of All accounts.
-const TABS = ["holdings", "investments", "rules", "analysis"];
+const TABS = ["holdings", "investments", "rules", "analysis", "cashflow"];
 
 // The view the URL held when last written. Changing it adds a history entry,
 // so Back returns to the previous screen instead of leaving the app. Anything
@@ -2511,6 +2737,12 @@ function writeUrl() {
     else {
       if (analysis.from) p.set("from", analysis.from);
       if (analysis.to) p.set("to", analysis.to);
+    }
+  } else if (state.account === "cashflow") {
+    if (cash.preset) p.set("period", cash.preset);
+    else {
+      if (cash.from) p.set("from", cash.from);
+      if (cash.to) p.set("to", cash.to);
     }
   } else if (!TABS.includes(state.account)) {
     if (state.from || state.to) {
@@ -2561,6 +2793,14 @@ function readUrl(search = location.search) {
       analysis.to = day("to");
       analysis.preset = null;
     } else applyPeriod(DEFAULT_PERIOD);       // no period named is the default one
+  } else if (state.account === "cashflow") {
+    cash.from = cash.to = null;
+    cash.preset = HORIZONS.some(h => h.key === p.get("period")) ? p.get("period") : DEFAULT_HORIZON;
+    if (!p.has("period") && (day("from") || day("to"))) {
+      cash.from = day("from");
+      cash.to = day("to");
+      cash.preset = null;
+    }
   } else if (!TABS.includes(state.account)) {
     if (day("from") || day("to")) {
       state.from = day("from");
@@ -2736,7 +2976,7 @@ function md(text) {
   return out.join("");
 }
 
-const VIEW_NAMES = {all: "all accounts", analysis: "spending analysis",
+const VIEW_NAMES = {all: "all accounts", analysis: "spending analysis", cashflow: "cashflow",
                     holdings: "term deposits", investments: "investments",
                     rules: "rules"};
 
@@ -2755,6 +2995,11 @@ function describeView(params) {
     if (preset) parts.push({ytd: "this year", all: "all time"}[preset.key] || "last " + preset.label);
     else if (analysis.from || analysis.to)
       parts.push(`${analysis.from || "the start"} to ${analysis.to || "now"}`);
+  }
+  if (state.account === "cashflow" && ("view" in params || "period" in params || "from" in params || "to" in params)) {
+    const preset = HORIZONS.find(h => h.key === cash.preset);
+    parts.push(preset ? (preset.key === "plans" ? "until the last plan" : "next " + preset.label)
+                      : `${cash.from || "a month ago"} to ${cash.to || "three months ahead"}`);
   }
   if (state.account === "analysis" && "hide" in params) {
     const names = tally(windowRows("expense")).map(([name]) => name);
@@ -2825,14 +3070,17 @@ function agentEvent(turn, event) {
 // The agent's search names no table, so any old qt goes with it.
 function applyView(params) {
   const url = new URLSearchParams(location.search);
-  // from and to mean a different range on each view, so crossing between the
-  // spending analysis and a ledger drops them. Without this, moving from an
-  // account's range to the analysis handed that range over as its period. One
-  // ledger to another keeps it: the range means the same thing on both.
-  const crossing = params.view === "analysis" || state.account === "analysis";
+  // from, to and period mean a different range on each kind of view, and the
+  // analysis and the cashflow share period keys, so crossing between a ledger,
+  // the analysis and the cashflow drops all three. Without this, moving from
+  // an account's range to the analysis handed that range over as its period.
+  // One ledger to another keeps it: the range means the same thing on both.
+  const kind = view => view === "analysis" || view === "cashflow" ? view : "ledger";
+  const crossing = kind(params.view) !== kind(state.account);
   if ("view" in params && crossing && !("from" in params) && !("to" in params) && !("period" in params)) {
     url.delete("from");
     url.delete("to");
+    url.delete("period");
   }
   for (const [key, value] of Object.entries(params)) {
     if (value === "") { url.delete(key); continue; }
@@ -3057,6 +3305,7 @@ function render() {
   // calls renderDrill, so without this it would stay on screen.
   analysis.category = null;
   showDrill(false);
+  if (view === "cashflow") { renderCashflow(); return restoreFind(); }
   // These views have no transaction table, so restoreFind drops any search.
   if (view === "holdings") { renderHoldings("term deposit"); return restoreFind(); }
   if (view === "investments") { renderHoldings("investment"); return restoreFind(); }
@@ -3071,9 +3320,10 @@ function render() {
   writeUrl();          // again: renderYears has just settled state.year
 }
 
-// no-cache: data.json is rewritten after every change, and a reload may reuse
-// a cached copy for hours otherwise. This makes the browser check first.
-fetch("data.json", {cache: "no-cache"})
+// no-store: data.json is rewritten after every change, and a copy written in
+// the same second as the last one looks unchanged to a revalidation, which
+// goes by whole seconds. So the browser never keeps a copy at all.
+fetch("data.json", {cache: "no-store"})
   .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status + " " + r.statusText)))
   .then(d => {
     takeData(d);

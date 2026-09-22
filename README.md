@@ -42,8 +42,9 @@ author's own statements. Edit them for yours, or add rules on the Rules view.
 Exports the database to `frontend/data.json`, then serves the page. Run it
 again after loading new statements.
 
-The views are All accounts, one ledger per account, Spending analysis, Term
-deposits, Investments and Rules. The URL holds the view, so a link or a
+The views are All accounts, one ledger per account, Spending analysis, Cashflow
+(free cash day by day, with the what-ifs ahead), Term deposits, Investments and
+Rules. The URL holds the view, so a link or a
 bookmark opens the same place.
 
 The bar at the top of the page asks an AI agent about your money. It needs the
