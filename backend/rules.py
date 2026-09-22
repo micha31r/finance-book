@@ -39,12 +39,8 @@ def preview(conn, pattern, limit=12):
 
 
 def refusal(pattern, category=""):
-    """Why a rule cannot be saved, or None."""
-    if "~" in category:
-        # The page's address joins category names with ~, so this one would
-        # split in two there.
-        return "a category can't contain ~"
-    return db.risky_pattern(pattern)
+    """Why a rule cannot be saved, or None. The same rules the page applies."""
+    return db.risky_pattern(pattern) or db.category_error(category)
 
 
 def main():

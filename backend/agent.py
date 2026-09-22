@@ -509,11 +509,10 @@ def apply_proposal(sql):
         # A risky pattern would hang every relabel, and the page's URL uses ~ to
         # separate categories. Totals pick rows by type, so a type spelled any
         # other way, even 'Transfer', would drop its rows out of every total.
-        types = ("income", "expense", "transfer")
+        types = backend_db.TYPES
         for rule in conn.execute("SELECT id, pattern, category, type FROM rule"):
-            problem = backend_db.risky_pattern(rule["pattern"])
-            if "~" in rule["category"]:
-                problem = "a category can't contain ~"
+            problem = (backend_db.risky_pattern(rule["pattern"])
+                       or backend_db.category_error(rule["category"]))
             if rule["type"] not in (None, *types):
                 problem = "type must be income, expense, transfer or null"
             if problem:
@@ -523,14 +522,13 @@ def apply_proposal(sql):
                 raise ValueError(f"not applied: transaction {row['txn_id']}: "
                                  "type must be income, expense or transfer")
         # The same ~ rule as a rule's category, and a blank one is no label at all.
-        # The page's rule for a category (serve.py category_error): text
-        # without ~, at most 60 characters once stripped, and never blank.
+        # The page's rule for a category, and a blank one is no label at all.
         for row in conn.execute("SELECT txn_id, category FROM manual_category"):
-            category = row["category"]
-            if (not isinstance(category, str) or "~" in category
-                    or not 1 <= len(category.strip()) <= 60):
-                raise ValueError(f"not applied: transaction {row['txn_id']}: "
-                                 "category must be 1 to 60 characters of text without ~")
+            problem = backend_db.category_error(row["category"])
+            if not problem and not row["category"].strip():
+                problem = "a category cannot be blank"
+            if problem:
+                raise ValueError(f"not applied: transaction {row['txn_id']}: {problem}")
         reconcile.reclassify(conn)       # a new rule has to be applied to be worth anything
         conn.commit()
     finally:

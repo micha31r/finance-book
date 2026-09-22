@@ -47,18 +47,10 @@ def apply_rules_now():
     conn.close()
 
 
-def is_date(value):
-    """Whether value is a real date written YYYY-MM-DD, like 2026-09-15."""
-    try:
-        return date.fromisoformat(value).isoformat() == value
-    except (TypeError, ValueError):
-        return False
-
-
 # How far apart the rows of a repeating plan sit: days, or calendar months.
 STEP_DAYS = {"weekly": 7, "fortnightly": 14}
 STEP_MONTHS = {"monthly": 1, "quarterly": 3, "yearly": 12}
-TYPES = ("automatic", "income", "expense", "transfer")
+TYPES = ("automatic", *backend_db.TYPES)
 # The note on manual_type rows set from the page. classify.py stores one you type.
 NOTE = "entered by hand"
 
@@ -84,29 +76,6 @@ def series_dates(start, repeat, until):
             return days
         days.append(day)
         n += 1
-
-
-def category_error(value):
-    """Why `value` cannot be a category, or None. Blank means none."""
-    if not isinstance(value, str):
-        return "category must be text"
-    # The analysis view joins hidden categories with ~ in its URL, so a
-    # category holding one would come back as two.
-    if "~" in value:
-        return "a category cannot contain ~"
-    if len(value.strip()) > 60:
-        return "a category is at most 60 characters"
-    return None
-
-
-def bad_cents(value):
-    """True unless `value` is an amount SQLite can store and add up.
-
-    type, not isinstance: isinstance(True, int) holds, so true would save as 1
-    cent. A hundred billion dollars is more than any account holds, and a sum
-    of amounts near SQLite's own 8-byte limit overflows the export.
-    """
-    return type(value) is not int or abs(value) > 10**13
 
 
 def misdated(conn, account, day):
@@ -144,11 +113,11 @@ def add_txn(conn, item):
     if type(account) is not int or not conn.execute(
             "SELECT 1 FROM account WHERE id = ?", (account,)).fetchone():
         return {"error": "account must be the id of one of your accounts"}
-    if not is_date(day):
+    if not backend_db.is_date(day):
         return {"error": "date must be a real day written YYYY-MM-DD"}
     if not isinstance(description, str) or not 1 <= len(description.strip()) <= 200:
         return {"error": "description must be 1 to 200 characters of text"}
-    if bad_cents(amount) or amount == 0:
+    if backend_db.bad_cents(amount) or amount == 0:
         return {"error": "amount must be a non-zero integer in cents"}
     if kind not in TYPES:
         return {"error": "type must be automatic, income, expense or transfer"}
@@ -156,7 +125,7 @@ def add_txn(conn, item):
         return {"error": "an expense is negative and income positive"}
     if category is None:
         category = ""
-    problem = category_error(category)
+    problem = backend_db.category_error(category)
     if problem:
         return {"error": problem}
     if not isinstance(whatif, bool):
@@ -166,7 +135,7 @@ def add_txn(conn, item):
     start = date.fromisoformat(day)
     days = [start]
     if repeat != "once":
-        if not is_date(until) or not start <= date.fromisoformat(until) <= months_later(start, 120):
+        if not backend_db.is_date(until) or not start <= date.fromisoformat(until) <= months_later(start, 120):
             return {"error": "until must be a date from the first row's date to ten years after it"}
         days = series_dates(start, repeat, date.fromisoformat(until))
     problem = None if whatif else misdated(conn, account, day)
@@ -240,7 +209,7 @@ def edit_txn(conn, txn_id, item):
                 " ON CONFLICT(txn_id) DO UPDATE SET type=excluded.type, note=excluded.note,"
                 " set_at=excluded.set_at", [(i, value, NOTE, now) for i in targets])
     elif field == "category":
-        problem = category_error(value)
+        problem = backend_db.category_error(value)
         if problem:
             return {"error": problem}
         if not value.strip():
@@ -251,7 +220,7 @@ def edit_txn(conn, txn_id, item):
                 " ON CONFLICT(txn_id) DO UPDATE SET category=excluded.category,"
                 " set_at=excluded.set_at", [(i, value.strip(), now) for i in targets])
     elif field == "date":
-        if not is_date(value):
+        if not backend_db.is_date(value):
             return {"error": "date must be a real day written YYYY-MM-DD"}
         problem = None if row["whatif"] else misdated(conn, row["account_id"], value)
         if problem:
@@ -262,7 +231,7 @@ def edit_txn(conn, txn_id, item):
                          conn, row["account_id"], value, row["amount"], row["match_key"]),
                       row["id"]))
     else:
-        if bad_cents(value) or value == 0:
+        if backend_db.bad_cents(value) or value == 0:
             return {"error": "amount must be a non-zero integer in cents"}
         # The amount is part of each row's key, so each takes the next occurrence there.
         for target in conn.execute(f"SELECT id, date, match_key FROM txn WHERE id IN ({marks})",
@@ -594,7 +563,7 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         if path == "/api/rules":
             return self._add_rule(item)
         balance, as_at = item.get("balance"), item.get("as_at")
-        if not item.get("name") or bad_cents(balance):
+        if not item.get("name") or backend_db.bad_cents(balance):
             return self._send({"error": "name and integer balance in cents required"}, 400)
         # JSON can send a list or an object where text belongs, and SQLite can't store those.
         if not isinstance(item["name"], str) or any(
@@ -603,7 +572,7 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             return self._send({"error": "name, institution and note must be text"}, 400)
         if item.get("id") is not None and type(item["id"]) is not int:
             return self._send({"error": "id must be an integer"}, 400)
-        if as_at is not None and not is_date(as_at):
+        if as_at is not None and not backend_db.is_date(as_at):
             return self._send({"error": "as_at must be a YYYY-MM-DD date or null"}, 400)
         kind = item.get("kind") or "term deposit"
         if kind not in ("term deposit", "investment"):
@@ -637,7 +606,7 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         problem = backend_db.risky_pattern(pattern)
         if problem:
             return self._send({"error": problem}, 400)
-        problem = category_error(category)
+        problem = backend_db.category_error(category)
         if problem:
             return self._send({"error": problem}, 400)
         conn = backend_db.connect()

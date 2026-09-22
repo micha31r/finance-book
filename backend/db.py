@@ -19,7 +19,7 @@ import re
 import re._parser as sre_parse
 import sqlite3
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from re._constants import BRANCH, MAX_REPEAT, MIN_REPEAT
 
@@ -171,6 +171,43 @@ def risky_pattern(pattern):
     if sum(1 for op, av in _nodes(tree) if op in repeats and av[1] > 1 and av[0] != av[1]) > 2:
         return "more than two open-ended repeats, like .*A.*B.*, can run for minutes"
     return None
+
+
+# ---- the rules for a field, shared by the page, the CLIs and the agent's
+# proposals, so they cannot drift apart ----
+
+TYPES = ("income", "expense", "transfer")
+
+
+def is_date(value):
+    """Whether value is a real date written YYYY-MM-DD, like 2026-09-15."""
+    try:
+        return date.fromisoformat(value).isoformat() == value
+    except (TypeError, ValueError):
+        return False
+
+
+def category_error(value):
+    """Why `value` cannot be a category, or None. Blank means none."""
+    if not isinstance(value, str):
+        return "category must be text"
+    # The analysis view joins hidden categories with ~ in its URL, so a
+    # category holding one would come back as two.
+    if "~" in value:
+        return "a category cannot contain ~"
+    if len(value.strip()) > 60:
+        return "a category is at most 60 characters"
+    return None
+
+
+def bad_cents(value):
+    """True unless `value` is an amount SQLite can store and add up.
+
+    type, not isinstance: isinstance(True, int) holds, so true would save as 1
+    cent. A hundred billion dollars is more than any account holds, and a sum
+    of amounts near SQLite's own 8-byte limit overflows the export.
+    """
+    return type(value) is not int or abs(value) > 10**13
 
 
 @functools.lru_cache(maxsize=None)

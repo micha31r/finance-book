@@ -50,7 +50,7 @@ def main():
     for name in ("set", "clear"):
         p = sub.add_parser(name)
         if name == "set":
-            p.add_argument("type", choices=["transfer", "income", "expense"])
+            p.add_argument("type", choices=db.TYPES)
         p.add_argument("--like", help="SQL LIKE pattern against the description")
         p.add_argument("--id", nargs="+", type=int)
         p.add_argument("--note")
