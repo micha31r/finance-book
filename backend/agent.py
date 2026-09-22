@@ -44,8 +44,9 @@ SECRET = {("account", "bsb"), ("account", "number"),
           ("txn", "counterparty"), ("document", "source_name")}
 
 # Tables a proposed change is allowed to touch. Everything here is a label or a
-# hand-entered balance; nothing here is a parsed bank record.
-WRITABLE = {"rule", "manual_type", "holding"}
+# hand-entered balance; nothing here is a parsed bank record. txn stays out,
+# even the rows the user typed in: those are edited on the page.
+WRITABLE = {"rule", "manual_type", "manual_category", "holding"}
 
 # Someone else's BSB and account number inside a description, like
 # "TO 123-456 12345678". Your own are found by value instead, in mask().
@@ -75,9 +76,9 @@ def hide_secrets(action, table, column, _db, _source):
 def guard_change(written, action, table, column, _db, _source):
     """SQLite authorizer for a proposed change. Bind `written` with partial.
 
-    The change may write to rule, manual_type and holding, and read anything
-    but the secret columns. Anything else is refused, including CREATE, DROP,
-    ALTER, ATTACH, DETACH and PRAGMA.
+    The change may write to rule, manual_type, manual_category and holding,
+    and read anything but the secret columns. Anything else is refused,
+    including CREATE, DROP, ALTER, ATTACH, DETACH and PRAGMA.
 
     Each table it writes to is added to `written`. A statement that writes
     nothing leaves it empty: a SELECT, or VACUUM INTO, which SQLite never asks
@@ -250,8 +251,17 @@ async def run_query_tool(args):
                        "purpose": args.get("purpose", ""), "rows": len(rows)})
     answer = {"handle": handle, "columns": columns, "row_count": len(rows),
               "truncated": truncated, "totals": totals}
+    notes = []
     if truncated:
-        answer["note"] = "stopped at 5000 rows, so the totals cover only those; narrow the query"
+        notes.append("stopped at 5000 rows, so the totals cover only those; narrow the query")
+    # What-ifs sit in txn beside the bank's rows, so a total that forgets the
+    # tag counts plans as money. bare() blanks strings and comments, so a txn
+    # or whatif inside one does not count.
+    stripped = bare(sql)
+    if re.search(r"\btxn\b", stripped, re.I) and not re.search(r"\bwhatif\b", stripped, re.I):
+        notes.append("txn holds what-if rows too; add AND whatif = 0 unless the user asked about plans")
+    if notes:
+        answer["note"] = ". ".join(notes)
     # A handful of rows is the answer itself, not a sample of it.
     if len(rows) <= 3:
         answer["rows"] = rows
@@ -310,6 +320,9 @@ async def read_rows_tool(args):
                    "description": "open this category's drill-down ('Uncategorised' for "
                                   "rows with no category)"},
            "q": {"type": "string", "description": "search text for the transaction table on screen"},
+           "whatif": {"type": "string",
+                      "description": "'0' hides the what-if rows, the user's hypothetical "
+                                     "plans, on every table; '1' shows them"},
        }})
 async def set_view_tool(args):
     params = {k: str(v) for k, v in args.items() if v is not None}
@@ -319,8 +332,9 @@ async def set_view_tool(args):
 
 @tool("propose_change",
       "Suggest a change to the user's labels or entries. It is NOT applied: the user sees "
-      "your reasoning and an Apply button. Use it for a category rule, a transaction the "
-      "bank's wording got wrong, or a holding balance. Never for parsed bank records.",
+      "your reasoning and an Apply button. Use it for a category rule, one transaction's "
+      "type or category (manual_type, manual_category) when the bank's wording got it "
+      "wrong, or a holding balance. Never a txn row itself.",
       {"type": "object",
        "properties": {"title": {"type": "string", "description": "one line, what changes"},
                       "why": {"type": "string", "description": "why, with the numbers"},
@@ -366,6 +380,12 @@ accounts and is neither income nor spending. Never add 'expense' and 'transfer'
 together. Spending is -SUM(amount) WHERE type='expense'. Transfers have
 categories too, so filter by type whenever you sum a category.
 
+Rows with `whatif = 1` are hypothetical plans the user typed in, kept in `txn`
+beside the bank's rows. Every total of real money needs AND whatif = 0. Include
+them only when the user asks about plans, projections or what-ifs, and say so
+in the answer. `manual_category` is the user's own category for one row,
+applied after the rules, as `manual_type` is for type.
+
 `date` is the bank's posting date. `effective_date` is when the money actually
 moved, but it is often null. For "when did I spend this", use
 COALESCE(effective_date, date).
@@ -381,7 +401,10 @@ than guessing. Say plainly when the data cannot answer something.
 When your answer is about something the page can show, call `set_view` so they
 are looking at it. The spending analysis page shows income, spending and net for
 its period. Account views show money in, money out and net for a year or a date
-range. To show only some categories, `hide` all the others."""
+range. To show only some categories, `hide` all the others. The page counts
+what-ifs in its tables and totals while they are shown, which they are by
+default. When your figure leaves them out, pass `whatif` '0' so the page agrees
+with it; '1' shows them again."""
 
 
 async def stream(prompt, session=None):
@@ -499,6 +522,15 @@ def apply_proposal(sql):
             if row["type"] not in types:
                 raise ValueError(f"not applied: transaction {row['txn_id']}: "
                                  "type must be income, expense or transfer")
+        # The same ~ rule as a rule's category, and a blank one is no label at all.
+        # The page's rule for a category (serve.py category_error): text
+        # without ~, at most 60 characters once stripped, and never blank.
+        for row in conn.execute("SELECT txn_id, category FROM manual_category"):
+            category = row["category"]
+            if (not isinstance(category, str) or "~" in category
+                    or not 1 <= len(category.strip()) <= 60):
+                raise ValueError(f"not applied: transaction {row['txn_id']}: "
+                                 "category must be 1 to 60 characters of text without ~")
         reconcile.reclassify(conn)       # a new rule has to be applied to be worth anything
         conn.commit()
     finally:

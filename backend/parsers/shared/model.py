@@ -20,9 +20,11 @@ class Transaction:
 
 
 # Ranks decide who wins when two documents describe the same transaction.
-# A final statement beats an export, which beats a provisional listing.
-# Which source wins when two describe the same transaction.
-RANK = {"statement": 3, "export": 2, "report": 1, "list": 1}
+# A final statement beats an export, which beats a provisional listing. A
+# 'manual' document holds rows typed in on the page. They never share a key
+# with a bank row (see db.manual_occurrence), so its rank is never compared;
+# it is here so RANK[kind] holds for every document kind.
+RANK = {"statement": 3, "export": 2, "report": 1, "list": 1, "manual": 0}
 
 
 @dataclass

@@ -47,47 +47,74 @@ def current_balance(conn, account_id):
 
     That is the newest closing balance a document states, plus any rows dated
     after it. Those come from a file that states no balance, like an ANZ CSV
-    export downloaded after the last statement. Leaving them out would shift
-    every running balance derived from this one. When a statement and a
-    Transaction List end on the same day the statement wins, because the list
-    may predate that day's interest.
+    export downloaded after the last statement, or were typed in on the page.
+    Leaving them out would shift every running balance derived from this one.
     """
-    row = conn.execute(
-        "SELECT closing_balance, period_end FROM document"
-        " WHERE account_id = ? AND closing_balance IS NOT NULL"
-        " ORDER BY period_end DESC, kind = 'statement' DESC LIMIT 1", (account_id,)).fetchone()
-    if row is None:
+    known = db.last_known_balance(conn, account_id)
+    if known is None:
         return None, None
     later = conn.execute(
+        # A what-if is a plan: the bank holds no such money yet.
         "SELECT COALESCE(SUM(amount), 0) AS net, MAX(date) AS last FROM txn"
-        " WHERE account_id = ? AND date > ?", (account_id, row["period_end"])).fetchone()
-    return row["closing_balance"] + later["net"], later["last"] or row["period_end"]
+        " WHERE account_id = ? AND date > ? AND whatif = 0",
+        (account_id, known["period_end"])).fetchone()
+    return known["closing_balance"] + later["net"], later["last"] or known["period_end"]
 
 
 def export(conn):
     accounts, transactions = [], []
+    # How many rows each repeating plan has, by the id of its first row. One
+    # row left on its own, after a statement replaced the rest, is no series.
+    series = {r["series"]: r["n"] for r in conn.execute(
+        "SELECT series, COUNT(*) n FROM txn WHERE series IS NOT NULL"
+        " GROUP BY series HAVING COUNT(*) >= 2")}
     for row in conn.execute(
             "SELECT a.id, a.number, a.bsb, a.name, a.product, b.name AS bank"
             " FROM account a JOIN bank b ON b.id = a.bank_id"
             " ORDER BY b.name, a.number"):
         balance, as_at = current_balance(conn, row["id"])
         rows = conn.execute(
-            "SELECT date, effective_date, description, amount, type, category,"
-            " balance, provisional"
-            " FROM txn WHERE account_id = ? ORDER BY date, sequence, id", (row["id"],)).fetchall()
+            "SELECT t.id, t.date, t.effective_date, t.description, t.amount, t.type,"
+            " t.category, t.balance, t.provisional, t.whatif, t.series,"
+            " d.kind = 'manual' AS manual"
+            " FROM txn t JOIN document d ON d.id = t.document_id"
+            " WHERE t.account_id = ? ORDER BY t.date, t.sequence, t.id", (row["id"],)).fetchall()
+        # A row typed in on the page and dated inside one of these is one the
+        # bank has since reported on. The page flags it: if it happened, the
+        # bank's own row is here too, and it is counted twice.
+        periods = conn.execute(
+            "SELECT period_start, period_end FROM document WHERE account_id = ?"
+            " AND kind != 'manual' AND period_start IS NOT NULL", (row["id"],)).fetchall()
 
         # Walk backwards from the known current balance. Statements and CSV
         # exports disagree about whether they print a balance at all, so a
-        # derived one is the only series that covers every row.
+        # derived one is the only series that covers every row. A what-if is
+        # skipped: it is a plan, and no real balance moved for it.
         running = balance
         derived = [None] * len(rows)
         for i in range(len(rows) - 1, -1, -1):
+            if rows[i]["whatif"]:
+                continue
             derived[i] = running
             if running is not None:
                 running -= rows[i]["amount"]
+        # A what-if dated after the day the balance is known as at shows where
+        # it would go: that balance plus every what-if from then on. One dated
+        # earlier shows nothing. The bank's figure for that day stands, and a
+        # plan the bank has since reported on adds nothing to the ones after it.
+        planned = 0
+        for i, txn in enumerate(rows):
+            if txn["whatif"] and as_at is not None and txn["date"] > as_at:
+                planned += txn["amount"]
+                derived[i] = balance + planned
 
         for txn, balance_after in zip(rows, derived):
+            covered = 0
+            if txn["manual"]:
+                covered = int(any(p["period_start"] <= txn["date"] <= p["period_end"]
+                                  for p in periods))
             transactions.append({
+                "id": txn["id"],
                 "account": row["id"],
                 # `date` is the bank's posting date: it orders the statement and
                 # the running balance. `spent_on` is when the money actually
@@ -105,6 +132,12 @@ def export(conn):
                 "category": txn["category"],
                 "balance": balance_after,
                 "provisional": txn["provisional"],
+                "whatif": txn["whatif"],
+                # Only a row typed in on the page can be deleted or have its
+                # date or amount changed.
+                "manual": txn["manual"],
+                "series": series.get(txn["series"], 0),
+                "covered": covered,
             })
         accounts.append({
             "id": row["id"],
@@ -114,16 +147,14 @@ def export(conn):
             "bsb": row["bsb"],
             "balance": balance,
             "as_at": as_at,
-            "count": len(rows),
+            # Real rows: a what-if is a plan, not a transaction the account had.
+            "count": sum(1 for r in rows if not r["whatif"]),
         })
 
-    rules = [dict(r) for r in conn.execute(
-        # Count what this pattern matches. Counting rows that merely share the
-        # category made every rule in a shared category report the same
-        # inflated number: 86 rules claimed 9,315 matches over 3,505 rows.
-        "SELECT r.id, r.pattern, r.category,"
-        " (SELECT COUNT(*) FROM txn WHERE description REGEXP r.pattern) AS matches"
-        " FROM rule r ORDER BY r.id")]
+    # Hit counts are left out: running every pattern over every row took most
+    # of export's two seconds, and only the rules page shows them. It asks
+    # GET /api/rules, which counts them then.
+    rules = [dict(r) for r in conn.execute("SELECT id, pattern, category FROM rule ORDER BY id")]
     holdings = [dict(r) for r in conn.execute(
         "SELECT id, kind, name, institution, balance, as_at, note"
         " FROM holding ORDER BY kind, name")]
@@ -133,8 +164,10 @@ def export(conn):
     # sitting in them right now, and it is a direct check on what you enter.
     parked = conn.execute(
         # A pair only cancels out while both legs are transfers. If you typed one
-        # leg as spending, the other is money that went somewhere unheld.
-        "SELECT COALESCE(SUM(amount), 0) n FROM txn WHERE type = 'transfer' AND id NOT IN"
+        # leg as spending, the other is money that went somewhere unheld. A
+        # what-if is a plan: nothing was sent.
+        "SELECT COALESCE(SUM(amount), 0) n FROM txn WHERE type = 'transfer' AND whatif = 0"
+        " AND id NOT IN"
         " (SELECT p.from_txn_id FROM transfer p JOIN txn leg ON leg.id = p.to_txn_id"
         "   WHERE p.confirmed = 1 AND leg.type = 'transfer'"
         "  UNION SELECT p.to_txn_id FROM transfer p JOIN txn leg ON leg.id = p.from_txn_id"
@@ -160,7 +193,9 @@ def main():
                             " WHERE balance IS NOT NULL"):
         stated.setdefault((row["account_id"], row["date"], row["amount"]), set()).add(row["balance"])
     mismatches = [t for t in data["transactions"]
-                  if (t["account"], t["date"], t["amount"]) in stated
+                  # A what-if's balance is a projection, not one the bank printed.
+                  if not t["whatif"]
+                  and (t["account"], t["date"], t["amount"]) in stated
                   and t["balance"] not in stated[(t["account"], t["date"], t["amount"])]]
     conn.close()
 

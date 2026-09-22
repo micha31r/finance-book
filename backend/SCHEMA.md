@@ -1,6 +1,6 @@
 # Database schema
 
-SQLite, at `backend/finance.db`. Eight tables.
+SQLite, at `backend/finance.db`. Nine tables.
 
 **All money is signed integer cents.** Negative means money left the account.
 `-1575` is $15.75 spent. Divide by 100 only when displaying.
@@ -9,7 +9,8 @@ SQLite, at `backend/finance.db`. Eight tables.
 
 ```
 bank ──< account ──< document ──< txn >── transfer
-                                    └──── manual_type
+                                    ├──── manual_type
+                                    └──── manual_category
 holding   (standalone: money no statement covers)
 ```
 
@@ -45,7 +46,7 @@ One ingested file, or one account's slice of a multi-account file.
 |---|---|---|
 | id | INTEGER | primary key |
 | account_id | INTEGER | → account.id |
-| kind | TEXT | `statement`, `export`, `report`, `list` |
+| kind | TEXT | `statement`, `export`, `report`, `list`, `manual` |
 | period_start / period_end | TEXT | date, may be null |
 | statement_no | INTEGER | sequential per account, statements only |
 | opening_balance / closing_balance | INTEGER | cents, may be null |
@@ -54,13 +55,16 @@ One ingested file, or one account's slice of a multi-account file.
 
 `statement` is final and authoritative. `export` is a CSV download. `report`
 and `list` are provisional current-period listings that a later statement
-replaces.
+replaces. `manual` is the one document per account for the rows you typed in
+on the page. Its periods and balances are null and its `source_name` is
+`entered by hand`.
 
 **Current balance of an account** is the `closing_balance` of its newest
 document that has one, plus the amounts of any rows dated after that
 document's `period_end`. Those rows come from a source that states no balance,
-such as an ANZ CSV export. On a tie a statement wins. There is no stored balance
-field on `account`, so that loading older history never disturbs the present.
+such as an ANZ CSV export, or are real rows you typed in. A what-if never
+counts. On a tie a statement wins. There is no stored balance field on
+`account`, so that loading older history never disturbs the present.
 
 ## txn
 
@@ -78,9 +82,11 @@ field on `account`, so that loading older history never disturbs the present.
 | category | TEXT | where it came from, set by `rule`. Null if no rule matches. A transfer only gets one from a rule with a type. |
 | counterparty | TEXT | the other account number, internal transfers only |
 | reference | TEXT | bank trace number, pairs the two legs of a transfer |
-| provisional | INTEGER | 1 if from a `report` or `list` |
+| provisional | INTEGER | 1 if from a `report` or `list`, or a real row you typed in |
 | verified | INTEGER | 1 if covered by a balance check |
 | sequence | INTEGER | position within its document |
+| whatif | INTEGER | 1 for a plan you typed in on the page, 0 for real money. Set when the row is added, never changed. |
+| series | INTEGER | → txn.id of the first row of a repeating series, which points at itself. Null for a row on its own. A leftover from a replaced series keeps it; the export reports it as no series. |
 | occurrence, match_key | | deduplication keys, ignore when reading |
 
 `sequence` is how two rows on the same day are ordered. Row `id` follows
@@ -88,6 +94,45 @@ insertion order, which stops matching the statement the moment anything is
 re-ingested. Only the document that owns a row sets its sequence, because a CSV
 export covering the same day lists things in its own order. Read transactions
 with `ORDER BY date, sequence, id`.
+
+### Rows you type in
+
+The page adds rows to a ledger table with "+ add". A what-if (`whatif = 1`) is
+a plan. A real row (`whatif = 0`) is money the bank has not shown yet. Both go
+in the account's `manual` document, with `sequence` 1000000 so they list after
+the bank's rows on a shared day. A repeating one is a series: every row of it
+carries `series` = the first row's id.
+
+**You can** double-click a cell to edit the description, type or category of
+any row, the bank's included. On a row you typed in you can also edit the date
+and amount, and delete it. Type and category edits are stored in `manual_type`
+and `manual_category` against the row's id, so a re-ingest keeps them. A
+statement that replaces a provisional row deletes them with it, a real typed
+row included: label the bank's row again, or write a rule. On a series row,
+description, type, category and amount apply to the whole series. The date
+applies to that row only. Deleting a series row deletes the whole series.
+
+**You cannot** change a bank row's date or amount, or delete it. Nor can you
+change the what-if tag: delete the row you typed and add it again.
+
+How typed rows sit beside the bank's:
+
+- `occurrence` counts down from -1 for typed rows and up from 1 for the bank's,
+  over the same key `(account_id, date, amount, match_key)`. Two identical
+  what-ifs on one day both insert, and an ingested row never collides with one.
+- A real typed row is `provisional = 1`. It can only be dated after the
+  account's last known balance and no later than today. The next document that
+  states a balance replaces it, like a Transaction List row, and so does the
+  statement for its period. A CSV export with no balance does not: it adds the
+  bank's row beside yours, and yours shows as `covered`.
+- Ingest never touches a what-if. One dated inside any bank document's period
+  shows as `covered` on the page: delete it if it happened, or it is counted
+  twice. A what-if dated after the day the balance is known as at shows a
+  projected balance, that balance plus every what-if from then on. An earlier
+  one shows none.
+- Renaming a row changes its description only. The rules run again on the new
+  wording. Transfer pairing does not: a pair found before stays paired, and no
+  new pair is looked for.
 
 ### type is the field that matters for any total
 
@@ -100,11 +145,16 @@ Moving $5,000 from Everyday to Growth Saver produces one `transfer` row of
 `-500000` and another of `+500000`. Counting the negative one as an expense is
 the single most common way these numbers go wrong.
 
+**Every total of real money needs `AND whatif = 0`.** A what-if is a plan the
+user typed in, not money that moved. It sits in the same table with a `type`
+like any other row, so it is counted unless you leave it out. Include what-ifs
+only when the question is about plans, and say so.
+
 So:
 
 ```sql
-spending = -SUM(amount) WHERE type = 'expense'
-income   =  SUM(amount) WHERE type = 'income'
+spending = -SUM(amount) WHERE type = 'expense' AND whatif = 0
+income   =  SUM(amount) WHERE type = 'income'  AND whatif = 0
 ```
 
 `type` is recomputed across the whole database after every ingest, so it never
@@ -137,10 +187,26 @@ Your decision about one transaction, when the bank's wording cannot settle it.
 | set_at | TEXT | ISO timestamp |
 
 Applied last by `reclassify`, so no automatic rule can undo it. Set it with
-`classify.py`. Needed because some movements name no counterparty at all, such
-as a payment to your own name at a bank you have no statements for. Wording a
-bank always uses for the same thing, like `DETAILS ADVISED SEPARATELY` for money
-into a term deposit, is better as a rule with a type.
+`classify.py`, or double-click the type cell on the page. Needed because some
+movements name no counterparty at all, such as a payment to your own name at a
+bank you have no statements for. Wording a bank always uses for the same thing,
+like `DETAILS ADVISED SEPARATELY` for money into a term deposit, is better as a
+rule with a type.
+
+## manual_category
+
+Your category for one transaction, when no rule fits or a rule gets it wrong.
+
+| column | type | notes |
+|---|---|---|
+| txn_id | INTEGER | → txn.id, primary key |
+| category | TEXT | overrides `txn.category`. Never contains `~`. |
+| set_at | TEXT | ISO timestamp |
+
+Applied after the rules by `reclassify`, exactly as `manual_type` is for type.
+Set it by double-clicking the category cell on the page. An empty value removes
+the row and the rules apply again. Wording the bank always uses for the same
+thing is better as a rule, which labels every row that matches.
 
 ## rule
 
@@ -255,9 +321,9 @@ running balance. Do not build a balance chart from that column alone. Derive it
 by running the amounts forward from a document's `opening_balance`.
 
 **Provisional rows can change.** Anything with `provisional = 1` came from a
-current-period listing and will be replaced when the statement arrives. A
-statement deletes any it does not match, and a listing loaded after its
-statement adds nothing inside that period.
+current-period listing, or was typed in as a real row, and will be replaced
+when the statement arrives. A statement deletes any it does not match, and a
+listing loaded after its statement adds nothing inside that period.
 
 **Amounts are exact.** Never convert to float for arithmetic. Sum the integers,
 divide by 100 at the end.

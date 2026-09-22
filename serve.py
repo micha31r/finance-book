@@ -6,14 +6,16 @@
 Exports fresh JSON from backend/finance.db every time it starts, so the page
 never shows stale numbers, then serves frontend/ on localhost.
 """
+import calendar
 import http.server
 import json
+import sqlite3
 import subprocess
 import sys
 import threading
 import uuid
 import webbrowser
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from functools import partial
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -53,6 +55,259 @@ def is_date(value):
         return False
 
 
+# How far apart the rows of a repeating plan sit: days, or calendar months.
+STEP_DAYS = {"weekly": 7, "fortnightly": 14}
+STEP_MONTHS = {"monthly": 1, "quarterly": 3, "yearly": 12}
+TYPES = ("automatic", "income", "expense", "transfer")
+# The note on manual_type rows set from the page. classify.py stores one you type.
+NOTE = "entered by hand"
+
+
+def months_later(day, months):
+    """`day` moved on by whole months, the day of the month clamped to the end.
+
+    Each step counts from the day given, not from the clamped one before it,
+    so the 31st lands on 28 February and back on 31 March.
+    """
+    month = day.month - 1 + months
+    year, month = day.year + month // 12, month % 12 + 1
+    return date(year, month, min(day.day, calendar.monthrange(year, month)[1]))
+
+
+def series_dates(start, repeat, until):
+    """Every day a repeating plan lands on, from `start` up to `until`."""
+    days, n = [], 0
+    while True:
+        day = (start + timedelta(days=n * STEP_DAYS[repeat]) if repeat in STEP_DAYS
+               else months_later(start, n * STEP_MONTHS[repeat]))
+        if day > until:
+            return days
+        days.append(day)
+        n += 1
+
+
+def category_error(value):
+    """Why `value` cannot be a category, or None. Blank means none."""
+    if not isinstance(value, str):
+        return "category must be text"
+    # The analysis view joins hidden categories with ~ in its URL, so a
+    # category holding one would come back as two.
+    if "~" in value:
+        return "a category cannot contain ~"
+    if len(value.strip()) > 60:
+        return "a category is at most 60 characters"
+    return None
+
+
+def bad_cents(value):
+    """True unless `value` is an amount SQLite can store and add up.
+
+    type, not isinstance: isinstance(True, int) holds, so true would save as 1
+    cent. A hundred billion dollars is more than any account holds, and a sum
+    of amounts near SQLite's own 8-byte limit overflows the export.
+    """
+    return type(value) is not int or abs(value) > 10**13
+
+
+def misdated(conn, account, day):
+    """Why a real row cannot sit on `day`, or None.
+
+    The bank's figure settles the balance up to the last day it stated one. A
+    real row on or before that day would move it, and cannot. One after today
+    has not happened yet, which makes it a plan. A what-if is a plan and moves
+    nothing, so it may sit anywhere.
+    """
+    known = backend_db.last_known_balance(conn, account)
+    if known and day <= known["period_end"]:
+        return (f"a real row must be dated after {known['period_end']}, the last day this"
+                " account's balance is known; tick what-if for an earlier plan")
+    if day > date.today().isoformat():
+        return "a real row cannot be dated after today; tick what-if for a plan"
+    return None
+
+
+def series_ids(conn, row):
+    """The row's id, or every id in its repeating plan."""
+    if not row["series"]:
+        return [row["id"]]
+    return [r["id"] for r in conn.execute("SELECT id FROM txn WHERE series = ?", (row["series"],))]
+
+
+def add_txn(conn, item):
+    """Insert a row typed in on the page, or a repeating series of them.
+
+    Returns {"added": n}, or {"error": why} with nothing written.
+    """
+    account, day, description = item.get("account"), item.get("date"), item.get("description")
+    amount, kind, category = item.get("amount"), item.get("type"), item.get("category")
+    whatif, repeat, until = item.get("whatif", True), item.get("repeat", "once"), item.get("until")
+    if type(account) is not int or not conn.execute(
+            "SELECT 1 FROM account WHERE id = ?", (account,)).fetchone():
+        return {"error": "account must be the id of one of your accounts"}
+    if not is_date(day):
+        return {"error": "date must be a real day written YYYY-MM-DD"}
+    if not isinstance(description, str) or not 1 <= len(description.strip()) <= 200:
+        return {"error": "description must be 1 to 200 characters of text"}
+    if bad_cents(amount) or amount == 0:
+        return {"error": "amount must be a non-zero integer in cents"}
+    if kind not in TYPES:
+        return {"error": "type must be automatic, income, expense or transfer"}
+    if kind == "expense" and amount > 0 or kind == "income" and amount < 0:
+        return {"error": "an expense is negative and income positive"}
+    if category is None:
+        category = ""
+    problem = category_error(category)
+    if problem:
+        return {"error": problem}
+    if not isinstance(whatif, bool):
+        return {"error": "whatif must be true or false"}
+    if repeat not in ("once", *STEP_DAYS, *STEP_MONTHS):
+        return {"error": "repeat must be once, weekly, fortnightly, monthly, quarterly or yearly"}
+    start = date.fromisoformat(day)
+    days = [start]
+    if repeat != "once":
+        if not is_date(until) or not start <= date.fromisoformat(until) <= months_later(start, 120):
+            return {"error": "until must be a date from the first row's date to ten years after it"}
+        days = series_dates(start, repeat, date.fromisoformat(until))
+    problem = None if whatif else misdated(conn, account, day)
+    if problem:
+        return {"error": problem}
+
+    ids = [backend_db.add_manual(conn, account, d.isoformat(), description.strip(), amount, whatif)
+           for d in days]
+    if len(ids) > 1:
+        # The first row's id names the series, on every row including itself.
+        conn.execute(f"UPDATE txn SET series = ? WHERE id IN ({','.join('?' * len(ids))})",
+                     (ids[0], *ids))
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    if kind != "automatic":
+        conn.executemany("INSERT INTO manual_type(txn_id, type, note, set_at) VALUES (?,?,?,?)",
+                         [(i, kind, NOTE, now) for i in ids])
+    if category.strip():
+        conn.executemany("INSERT INTO manual_category(txn_id, category, set_at) VALUES (?,?,?)",
+                         [(i, category.strip(), now) for i in ids])
+    reconcile.reclassify(conn, ids)
+    conn.commit()
+    return {"added": len(ids)}
+
+
+def edit_txn(conn, txn_id, item):
+    """Change one field of a row, and of every other row in its series.
+
+    Returns {"changed": n}, or {"error": why} with nothing written.
+    """
+    # SQLite would read "1e3" as 1000; a path holds a row id or nothing.
+    if not str(txn_id).isdecimal():
+        return {"error": "no such transaction"}
+    if len(item) != 1:
+        return {"error": "send exactly one field to change"}
+    field, value = next(iter(item.items()))
+    if field == "whatif":
+        return {"error": "the what-if tag cannot be changed"}
+    if field not in ("description", "type", "category", "date", "amount"):
+        return {"error": "only description, type, category, date and amount can be changed"}
+    row = conn.execute(
+        "SELECT t.id, t.account_id, t.series, t.amount, t.match_key, t.whatif,"
+        " d.kind = 'manual' AS manual FROM txn t JOIN document d ON d.id = t.document_id"
+        " WHERE t.id = ?", (txn_id,)).fetchone()
+    if row is None:
+        return {"error": "no such transaction"}
+    if field in ("date", "amount") and not row["manual"]:
+        return {"error": "the bank set this row's date and amount;"
+                         " only a row entered by hand can change them"}
+    # A repeating plan changes as one, except for its dates: a date moves one row.
+    targets = [row["id"]] if field == "date" else series_ids(conn, row)
+    marks = ",".join("?" * len(targets))
+    # Retyping one leg of a transfer decides what the other is, so the partners
+    # are found now, before an amount edit breaks the pair below.
+    partners = reconcile.with_partners(conn, targets)
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    if field == "description":
+        if not isinstance(value, str) or not 1 <= len(value.strip()) <= 200:
+            return {"error": "description must be 1 to 200 characters of text"}
+        # match_key keeps the bank's spelling, so a file loaded again still
+        # finds the row instead of inserting it a second time.
+        conn.execute(f"UPDATE txn SET description = ? WHERE id IN ({marks})",
+                     (value.strip(), *targets))
+    elif field == "type":
+        if value not in TYPES:
+            return {"error": "type must be automatic, income, expense or transfer"}
+        if value == "automatic":
+            conn.execute(f"DELETE FROM manual_type WHERE txn_id IN ({marks})", targets)
+        else:
+            conn.executemany(
+                "INSERT INTO manual_type(txn_id, type, note, set_at) VALUES (?,?,?,?)"
+                " ON CONFLICT(txn_id) DO UPDATE SET type=excluded.type, note=excluded.note,"
+                " set_at=excluded.set_at", [(i, value, NOTE, now) for i in targets])
+    elif field == "category":
+        problem = category_error(value)
+        if problem:
+            return {"error": problem}
+        if not value.strip():
+            conn.execute(f"DELETE FROM manual_category WHERE txn_id IN ({marks})", targets)
+        else:
+            conn.executemany(
+                "INSERT INTO manual_category(txn_id, category, set_at) VALUES (?,?,?)"
+                " ON CONFLICT(txn_id) DO UPDATE SET category=excluded.category,"
+                " set_at=excluded.set_at", [(i, value.strip(), now) for i in targets])
+    elif field == "date":
+        if not is_date(value):
+            return {"error": "date must be a real day written YYYY-MM-DD"}
+        problem = None if row["whatif"] else misdated(conn, row["account_id"], value)
+        if problem:
+            return {"error": problem}
+        # The date is part of the row's key, so it takes the next occurrence there.
+        conn.execute("UPDATE txn SET date = ?, occurrence = ? WHERE id = ?",
+                     (value, backend_db.manual_occurrence(
+                         conn, row["account_id"], value, row["amount"], row["match_key"]),
+                      row["id"]))
+    else:
+        if bad_cents(value) or value == 0:
+            return {"error": "amount must be a non-zero integer in cents"}
+        # The amount is part of each row's key, so each takes the next occurrence there.
+        for target in conn.execute(f"SELECT id, date, match_key FROM txn WHERE id IN ({marks})",
+                                   targets).fetchall():
+            conn.execute("UPDATE txn SET amount = ?, occurrence = ? WHERE id = ?",
+                         (value, backend_db.manual_occurrence(
+                             conn, row["account_id"], target["date"], value, target["match_key"]),
+                          target["id"]))
+        # A transfer pairs two equal amounts. Ingest may have paired a real row
+        # typed in on the page with a bank row; with a new amount it no longer
+        # fits, so the pair goes and the partner is retyped below.
+        conn.execute(f"DELETE FROM transfer WHERE from_txn_id IN ({marks}) OR to_txn_id IN ({marks})",
+                     (*targets, *targets))
+    # Sign, rules and your decisions again, for these rows and their transfer partners.
+    reconcile.reclassify(conn, partners)
+    conn.commit()
+    return {"changed": len(targets)}
+
+
+def delete_txn(conn, txn_id):
+    """Delete a row typed in on the page, with every other row in its series.
+
+    Returns {"deleted": n}, or {"error": why} with nothing written.
+    """
+    if not str(txn_id).isdecimal():
+        return {"error": "no such transaction"}
+    row = conn.execute(
+        "SELECT t.id, t.series, d.kind = 'manual' AS manual FROM txn t"
+        " JOIN document d ON d.id = t.document_id WHERE t.id = ?", (txn_id,)).fetchone()
+    if row is None:
+        return {"error": "no such transaction"}
+    if not row["manual"]:
+        return {"error": "the bank's rows cannot be deleted; only a row entered by hand can"}
+    targets = series_ids(conn, row)
+    # Ingest may have paired a real hand row with a bank row as a transfer. That
+    # row is retyped, or it would stay half a transfer and count nowhere.
+    partners = [i for i in reconcile.with_partners(conn, targets) if i not in targets]
+    # Their manual_type, manual_category and transfer rows go too (ON DELETE CASCADE).
+    conn.execute(f"DELETE FROM txn WHERE id IN ({','.join('?' * len(targets))})", targets)
+    if partners:
+        reconcile.reclassify(conn, partners)
+    conn.commit()
+    return {"deleted": len(targets)}
+
+
 def main():
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
     python = str(PYTHON) if PYTHON.exists() else sys.executable
@@ -86,9 +341,11 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
 
     Holdings are things no statement covers, like a term deposit or a
     Sharesies balance. They have to be typed in. Rules relabel transactions.
-    And /api/apply runs a change the agent proposed and you approved, to a
-    rule, a manual type or a holding. Nothing that came from a bank document
-    is editable here.
+    Transactions typed in on the page, real ones and what-ifs, can be added,
+    changed and deleted. A bank row can be renamed, retyped and given a
+    category, but its date and amount are the bank's, and it stays. And
+    /api/apply runs a change the agent proposed and you approved, to a rule,
+    a manual type or category, or a holding.
     """
 
     # Seconds one read or write on the socket may block. Without it, a request
@@ -146,7 +403,12 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         conn.close()
         return rows
 
-    def _rules(self):
+    def _rules(self, hits=True):
+        # Counting hits runs every pattern over every row, nearly two seconds.
+        # A change answers without them: the page reloads and asks GET
+        # /api/rules for the counts once.
+        if not hits:
+            return self._query("SELECT id, pattern, category FROM rule ORDER BY id")
         return self._query(
             "SELECT r.id, r.pattern, r.category,"
             " (SELECT COUNT(*) FROM txn WHERE description REGEXP r.pattern) AS matches"
@@ -182,6 +444,27 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             self._send({"error": "request body must be a JSON object"}, 400)
             return None
         return item
+
+    def _txn(self, change, *args):
+        """Run one change to the transactions, then rebuild data.json for it.
+
+        BEGIN IMMEDIATE takes the write lock before the change reads anything,
+        so two adds at once cannot pick the same occurrence. The change commits
+        itself when it goes through. Closing without a commit throws a refused
+        or failed one away, so nothing half-done is kept.
+        """
+        conn = backend_db.connect()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            result = change(conn, *args)
+        except (sqlite3.Error, OverflowError) as error:
+            # ingest.py holding the lock, or a number too big for SQLite.
+            return self._send({"error": f"not saved: {error}"}, 500)
+        finally:
+            conn.close()
+        if "error" in result:
+            return self._send(result, 400)
+        return self._rebuild_then_send(result)
 
     def _rebuild_then_send(self, payload):
         """Rewrite data.json, then send `payload`, or export's error if it failed.
@@ -266,13 +549,27 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             except BrokenPipeError:
                 pass
 
+    def do_GET(self):
+        # Only the rules page shows hit counts, so it asks here; see _rules.
+        if urlsplit(self.path).path == "/api/rules":
+            return self._send(self._rules())
+        super().do_GET()
+
     def do_POST(self):
         path = urlsplit(self.path).path
-        if path not in ("/api/holdings", "/api/rules", "/api/chat", "/api/apply", "/api/stop"):
+        txn_id = None
+        if path.startswith("/api/txn/"):                # /api/txn/<id> changes one row
+            path, txn_id = "/api/txn/", path.rsplit("/", 1)[1]
+        if path not in ("/api/holdings", "/api/rules", "/api/chat", "/api/apply", "/api/stop",
+                        "/api/txn", "/api/txn/"):
             return self.send_error(404)
         item = self._body()
         if item is None:
             return
+        if path == "/api/txn":
+            return self._txn(add_txn, item)
+        if path == "/api/txn/":
+            return self._txn(edit_txn, txn_id, item)
         if path == "/api/chat":
             return self._chat(item)
         if path == "/api/stop":
@@ -293,13 +590,11 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 changed = agent.apply_proposal(item.get("sql", ""))
             except Exception as error:
                 return self._send({"error": str(error)}, 400)
-            return self._rebuild_then_send({"changed": changed, "rules": self._rules()})
+            return self._rebuild_then_send({"changed": changed, "rules": self._rules(hits=False)})
         if path == "/api/rules":
             return self._add_rule(item)
         balance, as_at = item.get("balance"), item.get("as_at")
-        # type, not isinstance: isinstance(True, int) holds, so true would save as 1 cent.
-        # SQLite integers are 8 bytes. A larger number would crash the insert.
-        if not item.get("name") or type(balance) is not int or not -2**63 <= balance < 2**63:
+        if not item.get("name") or bad_cents(balance):
             return self._send({"error": "name and integer balance in cents required"}, 400)
         # JSON can send a list or an object where text belongs, and SQLite can't store those.
         if not isinstance(item["name"], str) or any(
@@ -342,10 +637,9 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         problem = backend_db.risky_pattern(pattern)
         if problem:
             return self._send({"error": problem}, 400)
-        # The analysis view joins hidden categories with ~ in its URL, so a
-        # category holding one would come back as two.
-        if "~" in category:
-            return self._send({"error": "a category cannot contain ~"}, 400)
+        problem = category_error(category)
+        if problem:
+            return self._send({"error": problem}, 400)
         conn = backend_db.connect()
         conn.execute("INSERT INTO rule(pattern, category, note, created_at) VALUES (?,?,?,?)",
                      (pattern, category, note,
@@ -353,10 +647,12 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         conn.commit()
         conn.close()
         apply_rules_now()
-        return self._rebuild_then_send(self._rules())
+        return self._rebuild_then_send(self._rules(hits=False))
 
     def do_DELETE(self):
         path = urlsplit(self.path).path
+        if path.startswith("/api/txn/"):
+            return self._txn(delete_txn, path.rsplit("/", 1)[1])
         conn = backend_db.connect()
         if path.startswith("/api/holdings/"):
             conn.execute("DELETE FROM holding WHERE id = ?", (path.rsplit("/", 1)[1],))
@@ -368,7 +664,7 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             conn.commit()
             conn.close()
             apply_rules_now()
-            return self._rebuild_then_send(self._rules())
+            return self._rebuild_then_send(self._rules(hits=False))
         conn.close()
         return self.send_error(404)
 

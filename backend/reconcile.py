@@ -119,8 +119,9 @@ def gap_checks(conn, acct_id):
             continue
         expected = following["opening_balance"] - previous["closing_balance"]
         rows = conn.execute(
+            # A what-if is a plan, not money that moved between the two balances.
             "SELECT COALESCE(SUM(amount), 0) AS net, COUNT(*) AS n FROM txn"
-            " WHERE account_id = ? AND date > ? AND date < ?",
+            " WHERE account_id = ? AND date > ? AND date < ? AND whatif = 0",
             (acct_id, previous["period_end"], following["period_start"])).fetchone()
         results.append({
             "start": previous["period_end"], "end": following["period_start"],
@@ -256,10 +257,11 @@ def _match_amount_pass(conn, aliases, rejected):
     # The pool comes from the data, not from stored types, so loading every
     # file in one run pairs the same rows as loading them over several. A row
     # whose type is already settled, by a held counterparty, a typed rule or
-    # your own decision, is not up for pairing.
+    # your own decision, is not up for pairing. Nor is a what-if: it is a
+    # plan, and no money moved for it.
     rows = conn.execute(
-        "SELECT id, account_id, date, amount, description FROM txn"
-        " WHERE id NOT IN (SELECT from_txn_id FROM transfer WHERE confirmed = 1"
+        "SELECT id, account_id, date, amount, description FROM txn WHERE whatif = 0"
+        "   AND id NOT IN (SELECT from_txn_id FROM transfer WHERE confirmed = 1"
         "                  UNION SELECT to_txn_id FROM transfer WHERE confirmed = 1)"
         "   AND id NOT IN (SELECT txn_id FROM manual_type)"
         f"  AND NOT {HELD_COUNTERPARTY}"
@@ -368,7 +370,7 @@ def interchangeable(options):
                for o in options)
 
 
-def reclassify(conn):
+def reclassify(conn, ids=None):
     """Set every transaction's type, then its category, from the whole picture.
 
     Run after loading, so the answer does not depend on file order. A leg is
@@ -376,24 +378,33 @@ def reclassify(conn):
     when a transfer link has been confirmed. Anything else is real money in or
     out, even if it names you: 'PAYMENT FROM <your name>' arriving from a bank we
     have no statements for is income until you confirm otherwise.
+
+    `ids` limits every step to those rows. An edit on the page passes the rows
+    it changed and their confirmed transfer partners (see with_partners): no
+    other row can come out differently, and relabelling all of them takes two
+    seconds the page would wait for.
     """
-    conn.execute("UPDATE txn SET type = CASE WHEN amount > 0 THEN 'income' ELSE 'expense' END")
-    conn.execute(f"UPDATE txn SET type = 'transfer' WHERE {HELD_COUNTERPARTY}")
+    # `1` keeps every row in, so each statement below reads the same either way.
+    only = "1" if ids is None else f"id IN ({','.join('?' * len(ids))})"
+    args = tuple(ids or ())
+    conn.execute("UPDATE txn SET type = CASE WHEN amount > 0 THEN 'income' ELSE 'expense' END"
+                 f" WHERE {only}", args)
+    conn.execute(f"UPDATE txn SET type = 'transfer' WHERE {HELD_COUNTERPARTY} AND {only}", args)
     conn.execute(
         "UPDATE txn SET type = 'transfer' WHERE id IN"
         " (SELECT from_txn_id FROM transfer WHERE confirmed = 1"
-        "  UNION SELECT to_txn_id FROM transfer WHERE confirmed = 1)")
+        f"  UNION SELECT to_txn_id FROM transfer WHERE confirmed = 1) AND {only}", args)
     # Rules can force a type as well as a category: a bank's own wording for
     # "this went into a term deposit" is knowable, and should not need tagging
     # by hand every time new statements arrive.
     rules = conn.execute("SELECT pattern, category, type FROM rule ORDER BY id").fetchall()
     for rule in rules:
         if rule["type"]:
-            conn.execute("UPDATE txn SET type = ? WHERE description REGEXP ?",
-                         (rule["type"], rule["pattern"]))
+            conn.execute(f"UPDATE txn SET type = ? WHERE description REGEXP ? AND {only}",
+                         (rule["type"], rule["pattern"], *args))
     # Your own decisions go last, so nothing automatic can undo them.
     conn.execute("UPDATE txn SET type = (SELECT type FROM manual_type WHERE txn_id = txn.id)"
-                 " WHERE id IN (SELECT txn_id FROM manual_type)")
+                 f" WHERE id IN (SELECT txn_id FROM manual_type) AND {only}", args)
     # A pair only nets out while both legs are transfers. If your decision or a
     # typed rule made one leg income or spending, the other leg is no longer
     # half of a transfer, and left as one it would count nowhere. So it takes
@@ -404,7 +415,7 @@ def reclassify(conn):
         " (SELECT p.from_txn_id FROM transfer p JOIN txn leg ON leg.id = p.to_txn_id"
         "   WHERE p.confirmed = 1 AND leg.type != 'transfer'"
         "  UNION SELECT p.to_txn_id FROM transfer p JOIN txn leg ON leg.id = p.from_txn_id"
-        "   WHERE p.confirmed = 1 AND leg.type != 'transfer')")
+        f"   WHERE p.confirmed = 1 AND leg.type != 'transfer') AND {only}", args)
 
     # Categories come last, once types are final. A category says where money
     # came from or went, which `type` cannot: salary and money from your
@@ -412,11 +423,29 @@ def reclassify(conn):
     # come first and a later one narrow it. A plain rule skips transfers, since
     # money moved between your own accounts was neither earned nor spent. A
     # rule that sets `type` still labels them: "Term deposit" is what they are.
-    conn.execute("UPDATE txn SET category = NULL")
+    conn.execute(f"UPDATE txn SET category = NULL WHERE {only}", args)
     for rule in rules:
         plain = "" if rule["type"] else " AND type != 'transfer'"
-        conn.execute(f"UPDATE txn SET category = ? WHERE description REGEXP ?{plain}",
-                     (rule["category"], rule["pattern"]))
+        conn.execute(f"UPDATE txn SET category = ? WHERE description REGEXP ?{plain} AND {only}",
+                     (rule["category"], rule["pattern"], *args))
+    # Your own category goes last too, so no rule can undo it.
+    conn.execute(
+        "UPDATE txn SET category = (SELECT category FROM manual_category WHERE txn_id = txn.id)"
+        f" WHERE id IN (SELECT txn_id FROM manual_category) AND {only}", args)
+
+
+def with_partners(conn, ids):
+    """Those rows plus the other leg of each one's confirmed transfer.
+
+    Retyping one leg decides what the other is (see reclassify's last type
+    step), so an edit hands both to reclassify and no more.
+    """
+    marks = ",".join("?" * len(ids))
+    legs = conn.execute(
+        "SELECT from_txn_id, to_txn_id FROM transfer WHERE confirmed = 1"
+        f" AND (from_txn_id IN ({marks}) OR to_txn_id IN ({marks}))", (*ids, *ids)).fetchall()
+    partners = {i for leg in legs for i in (leg["from_txn_id"], leg["to_txn_id"])}
+    return list(set(ids) | partners)
 
 
 def unheld_counterparties(conn):
@@ -445,8 +474,10 @@ def transfer_candidates(conn, aliases, window_days=3):
     rejected = {(row["from_txn_id"], row["to_txn_id"]) for row in conn.execute(
         "SELECT from_txn_id, to_txn_id FROM transfer WHERE confirmed = 0")}
     rows = [r for r in conn.execute(
+        # A what-if is a plan, so it is no leg of a transfer that happened.
         "SELECT t.id, t.account_id, t.date, t.amount, t.description, a.name, a.number"
-        " FROM txn t JOIN account a ON a.id = t.account_id WHERE t.type != 'transfer'")
+        " FROM txn t JOIN account a ON a.id = t.account_id"
+        " WHERE t.type != 'transfer' AND t.whatif = 0")
         if r["id"] not in linked]
 
     credits = [r for r in rows if r["amount"] > 0 and names_owner(r["description"], aliases)]
@@ -489,8 +520,9 @@ def verify_stored(conn, acct_id):
         # later and has no such overlap.
         lower = ">" if previous_end == statement["period_start"] else ">="
         net = conn.execute(
+            # A what-if moved no money, so it explains none of the statement's.
             f"SELECT COALESCE(SUM(amount), 0) net FROM txn"
-            f" WHERE account_id = ? AND date {lower} ? AND date <= ?",
+            f" WHERE account_id = ? AND date {lower} ? AND date <= ? AND whatif = 0",
             (acct_id, statement["period_start"], statement["period_end"])).fetchone()["net"]
         expected = statement["closing_balance"] - statement["opening_balance"]
         if net != expected:

@@ -64,6 +64,7 @@ def main():
             " FROM txn t JOIN account a ON a.id=t.account_id JOIN bank b ON b.id=a.bank_id"
             " WHERE t.type IN ('income','expense') AND ABS(t.amount) >= ?"
             "   AND t.id NOT IN (SELECT txn_id FROM manual_type)"
+            "   AND t.whatif = 0"                    # a plan is not a movement to explain
             " ORDER BY ABS(t.amount) DESC", (args.min,)).fetchall()
         print(f"{len(rows)} unexplained movements over {money_str(args.min)}:")
         show(rows)
@@ -95,8 +96,10 @@ def main():
     reconcile.reclassify(conn)
     conn.commit()
     total = conn.execute(
+        # Real money only: a what-if is a plan.
         "SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount END),0) i,"
-        " -COALESCE(SUM(CASE WHEN type='expense' THEN amount END),0) e FROM txn").fetchone()
+        " -COALESCE(SUM(CASE WHEN type='expense' THEN amount END),0) e FROM txn"
+        " WHERE whatif = 0").fetchone()
     print(f"income now {money_str(total['i'])}, spending {money_str(total['e'])}")
     conn.close()
     return 0

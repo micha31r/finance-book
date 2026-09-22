@@ -26,8 +26,9 @@ from parsers.shared.money import money_str
 
 def preview(conn, pattern, limit=12):
     rows = conn.execute(
+        # A what-if is a plan, so it is left out of every sum here.
         "SELECT date, amount, type, description FROM txn WHERE description REGEXP ?"
-        " ORDER BY ABS(amount) DESC", (pattern,)).fetchall()
+        " AND whatif = 0 ORDER BY ABS(amount) DESC", (pattern,)).fetchall()
     total = sum(r["amount"] for r in rows if r["type"] != "transfer")
     print(f"  matches {len(rows)} transactions, {money_str(total)} net excluding transfers")
     for r in rows[:limit]:
@@ -83,7 +84,8 @@ def main():
             # categories are used by more than one rule, and counting by
             # category made each of them report the whole category's rows.
             n = conn.execute("SELECT COUNT(*) c, COALESCE(SUM(CASE WHEN type != 'transfer'"
-                             " THEN amount END), 0) t FROM txn WHERE description REGEXP ?",
+                             " THEN amount END), 0) t FROM txn WHERE description REGEXP ?"
+                             " AND whatif = 0",
                              (r["pattern"],)).fetchone()
             print(f"  [{r['id']}] {r['category']:<14} /{r['pattern']}/"
                   f"   {n['c']} rows, {money_str(n['t'])}")
@@ -93,14 +95,16 @@ def main():
         import collections
         from merchants import merchant
         # Income as well as spending: a salary no rule labels is as much a gap
-        # as a shop.
+        # as a shop. Real rows only: a what-if is a plan you typed in yourself.
         counts = collections.Counter(
             merchant(r["description"]) for r in conn.execute(
-                "SELECT description FROM txn WHERE type != 'transfer' AND category IS NULL"))
+                "SELECT description FROM txn WHERE type != 'transfer' AND category IS NULL"
+                " AND whatif = 0"))
         items = [(n, v) for n, v in counts.most_common() if n and v >= args.min]
-        total = conn.execute("SELECT COUNT(*) FROM txn WHERE type != 'transfer'").fetchone()[0]
+        total = conn.execute("SELECT COUNT(*) FROM txn WHERE type != 'transfer'"
+                             " AND whatif = 0").fetchone()[0]
         done = conn.execute("SELECT COUNT(*) FROM txn WHERE type != 'transfer'"
-                            " AND category IS NOT NULL").fetchone()[0]
+                            " AND category IS NOT NULL AND whatif = 0").fetchone()[0]
         print(f"{done}/{total} income and spending rows categorised ({100 * done / total:.0f}%)")
         print(f"{len(items)} merchants and payers still unlabelled, {sum(v for _, v in items)} rows\n")
         for name, seen in items[:args.limit]:
@@ -187,7 +191,8 @@ def main():
     reconcile.reclassify(conn)
     conn.commit()
     for r in conn.execute("SELECT category, COUNT(*) c, SUM(amount) t FROM txn"
-                          " WHERE category IS NOT NULL AND type != 'transfer' GROUP BY category"):
+                          " WHERE category IS NOT NULL AND type != 'transfer' AND whatif = 0"
+                          " GROUP BY category"):
         print(f"  {r['category']:<14} {r['c']:>4} rows  {money_str(r['t'])}")
     conn.close()
     return 0

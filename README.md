@@ -40,6 +40,19 @@ The bar at the top of the page asks an AI agent about your money. It uses the
 `claude` CLI's sign-in, so run `claude` once first. It reads the database
 without account numbers, and changes nothing until you click Apply.
 
+Double-click a cell in any transaction table to edit its description, type or
+category. Each ledger table ends with a "+ add" row for money the bank has not
+listed yet: a real payment, or a what-if, a plan you want to see the effect of.
+What-ifs are tagged and can be hidden from the sidebar footer. Rows you add can
+be edited and deleted.
+
+The bank's rows keep their dates and amounts. A real row you add is replaced
+when the bank's next balance covers its day. A CSV export with no balance adds
+the bank's row beside yours instead, so delete yours then.
+
+Rule hit counts are not in `data.json`. The Rules tab fetches them from
+`/api/rules`, which keeps the export fast.
+
 ## Documentation
 
 - `backend/README.md` — supported banks, validation, idempotency

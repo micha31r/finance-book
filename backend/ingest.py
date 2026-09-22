@@ -65,8 +65,9 @@ def resolve_account(conn, doc):
     scores = []
     for account in candidates:
         hits = sum(1 for txn in doc.transactions if conn.execute(
-            "SELECT 1 FROM txn WHERE account_id = ? AND date = ? AND amount = ? LIMIT 1",
-            (account["id"], txn.date.isoformat(), txn.amount)).fetchone())
+            # A what-if is no evidence that an export's row is already known.
+            "SELECT 1 FROM txn WHERE account_id = ? AND date = ? AND amount = ? AND whatif = 0"
+            " LIMIT 1", (account["id"], txn.date.isoformat(), txn.amount)).fetchone())
         scores.append((hits, account))
     scores.sort(key=lambda s: -s[0])
     best = scores[0][0] if scores else 0

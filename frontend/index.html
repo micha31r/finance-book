@@ -259,6 +259,9 @@
      spilling into the Amount column. */
   table.rows td.tags .tag { max-width: 7.5rem; overflow: hidden; text-overflow: ellipsis;
                             vertical-align: bottom; }
+  /* A what-if row carries a third tag. Its category gives way, so the Type
+     column stays the width it has on every other row. */
+  tr.whatif td.tags .tag.cat { max-width: 5rem; }
   /* The same on the rules page, capped at its fixed-width category column. */
   #rules td .tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis;
                    vertical-align: bottom; }
@@ -307,6 +310,40 @@
   /* A provisional row is one the bank has not finalised. Dimming it says so
      without spending a column on the word. The reason is in the title. */
   tr.provisional td.desc, tr.provisional td.date { color: var(--ink-faint); font-style: italic; }
+  /* A what-if is a plan you typed in, not a bank row. It wears the accent: the
+     tag is filled with it and the description is written in it. */
+  /* No truncation: "what-if · covered" is the whole warning. */
+  .tag.whatif { --tag: var(--accent); max-width: none; }
+  tr.whatif td.desc { color: var(--accent); }
+
+  /* ---------- editing rows ---------- */
+  /* An editor stands in for one cell, or for one tag, and keeps the row's
+     height: 22px sits inside the line the text took, so nothing around it moves. */
+  .editor, tr.add input, tr.add select {
+    height: 22px; padding: 0 5px; font: inherit; font-size: 13px; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 0;
+    vertical-align: middle;
+  }
+  .editor:focus, tr.add input:focus, tr.add select:focus { outline: none; border-color: var(--accent); }
+  td.desc .editor, td.desc input { width: 100%; }
+  td.amt .editor, tr.add [name="amount"] { width: 5.5rem; text-align: right; }
+  tr.add [name="category"] { width: 7rem; }
+  /* Dimmed while the server has it. The reload draws the row afresh. */
+  td[aria-busy="true"], tr[aria-busy="true"] td { opacity: .5; }
+  /* The add row is the table's foot, which a search leaves alone: it redraws
+     the body only. At rest it is one faint "+ add". */
+  tfoot td { border-top: 1px solid var(--rule); border-bottom: 0; }
+  tr.add .addbtn { padding: 0; color: var(--ink-faint); }
+  tr.add .addbtn:hover { background: none; color: var(--ink); }
+  /* Open, the add row is one cell across the table holding a form that
+     wraps: one line at 1440, two below that. Spread over the five columns it
+     squeezed Description to 27px at 1024, since every other column was
+     widened by its control and Description alone gave way. */
+  tr.add td { white-space: normal; }
+  tr.add .addform { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+  tr.add .addform [name="description"] { flex: 1 1 14rem; }
+  tr.add .addform label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer;
+                          white-space: nowrap; font-size: 13px; height: 22px; }
   .empty { padding: 28px 10px; text-align: center; color: var(--ink-faint); }
   .controls { display: flex; gap: var(--gap); flex-wrap: wrap; align-items: flex-start;
               margin-bottom: var(--gap); }
@@ -387,6 +424,17 @@
   .rowbtn { background: none; border: 0; color: var(--ink-faint); cursor: pointer;
             font: inherit; font-size: 12px; padding: 2px 6px; border-radius: 0; }
   .rowbtn:hover { background: var(--hover); color: var(--ink); }
+  /* × on a row entered by hand, in space every date cell reserves, so dates
+     line up whether a row has one or not. Faded out until the row is hovered
+     or the × itself is focused, so the ledger does not fill with buttons.
+     Opacity, not visibility: a hidden button cannot take the focus, so Tab
+     could never reach it. After .rowbtn on purpose: it takes the padding and
+     line height from it. */
+  table.rows td.date, table.rows th.date { padding-left: 24px; }
+  table.rows td.date { position: relative; }
+  .del { position: absolute; left: 6px; top: 50%; transform: translateY(-50%);
+         opacity: 0; padding: 0 4px; margin: 0; line-height: 1; }
+  tr:hover .del, .del:focus-visible { opacity: 1; }
   /* margin-top:auto pins this to the bottom when the account list is short,
      and lets it scroll away with the list when it is long. */
   nav .foot {
@@ -394,6 +442,11 @@
     color: var(--ink-faint); font-size: 11px; line-height: 1.5;
   }
   nav .foot div + div { margin-top: 2px; }
+  /* The hide/show toggle after the what-if count: a word in the line, not a
+     sidebar item, so it sheds the item styling every other nav button gets. */
+  nav .whatif-toggle { display: inline; width: auto; padding: 0; font: inherit;
+                       color: var(--ink-dim); text-decoration: underline; text-underline-offset: 2px; }
+  nav .whatif-toggle:hover { background: none; color: var(--ink); }
 
   /* ---------- the agent ---------- */
   /* Fixed to the top on every view and every width, so you can always just
@@ -653,6 +706,8 @@
   </div>
   <div class="drill-body" id="drillBody"></div>
 </div>
+<!-- Suggestions for the category editors and the add row. render() fills it. -->
+<datalist id="categories"></datalist>
 
 
 <script src="vendor/chart.umd.js"></script>
@@ -681,6 +736,14 @@ const compact = c => {
 };
 // "1 transaction", not "1 transactions".
 const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+// Dollars typed by hand to cents, or null when the text is not an amount.
+// Commas only where a thousands separator belongs. Stripping them blindly
+// turned a typo like "50000,25" into $5,000,025.00 without a word.
+function cents(text) {
+  const typed = String(text).replace(/[$\s]/g, "");
+  if (!/^[-+]?\d{1,3}(,\d{3})*(\.\d{1,2})?$|^[-+]?\d+(\.\d{1,2})?$/.test(typed)) return null;
+  return Math.round(Number(typed.replace(/,/g, "")) * 100);
+}
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 // The export stamp is written in UTC. Show it in the reader's own time zone:
@@ -709,7 +772,8 @@ const dayLabel = day => {
 // primary action. Uncategorised is faint: it means "missing", not a kind of thing.
 function categoryColour(name) {
   if (!name || name === "Uncategorised") return css("--ink-faint");
-  const all = [...new Set(DATA.transactions.map(t => t.category).filter(Boolean))].sort();
+  // From every row, hidden what-ifs included, so the toggle cannot shift the hues.
+  const all = [...new Set(DATA.all.map(t => t.category).filter(Boolean))].sort();
   const i = all.indexOf(name);
   if (i < 0) return css("--ink-faint");
   // Lightness is set by contrast, not taste: the badge label is the dark
@@ -729,7 +793,9 @@ const MONTH_LABEL = m => {
 // state.from and state.to are a custom range on an account view, an alternative
 // to the year. Setting either sets year to null, so no year button lights up and
 // the default newest year cannot come back over the top of the range.
-let DATA, state = {account: "all", year: undefined, from: null, to: null};
+// state.whatif shows the what-if rows, the plans typed in by hand. Off, every
+// view reads real rows only.
+let DATA, state = {account: "all", year: undefined, from: null, to: null, whatif: true};
 const charts = {};
 
 // ---------- selection ----------
@@ -827,13 +893,27 @@ function renderSidebar() {
 
   const foot = document.createElement("div");
   foot.className = "foot";
+  // Real rows only, so the count still matches what the bank has. The plans
+  // are counted apart, with the toggle that hides them from every view.
+  const plans = DATA.all.length - DATA.real.length;
   foot.innerHTML =
-    `<div>${DATA.transactions.length.toLocaleString()} transactions`
-    + ` across ${DATA.accounts.length} accounts</div>`
+    `<div>${DATA.real.length.toLocaleString()} transactions`
+    + ` across ${DATA.accounts.length} accounts`
+    + (plans ? ` · ${plural(plans, "what-if")} <button class="whatif-toggle" type="button">${
+        state.whatif ? "hide" : "show"}</button>` : "")
+    + `</div>`
     + `<div>Exported ${esc(stamp(DATA.generated_at))}</div>`;
   nav.append(foot);
+  const toggle = foot.querySelector(".whatif-toggle");
+  if (toggle) toggle.onclick = () => {
+    state.whatif = !state.whatif;
+    render();
+    // render() rebuilt the sidebar. Focus the new copy of the toggle.
+    nav.querySelector(".whatif-toggle").focus({preventScroll: true});
+  };
 
-  nav.querySelectorAll("button").forEach(b => b.onclick = () => {
+  // Only the view buttons: the toggle above is a button in the same nav.
+  nav.querySelectorAll("button[data-id]").forEach(b => b.onclick = () => {
     const before = state.account;
     state.account = ["all", "holdings", "investments", "rules", "analysis"]
       .includes(b.dataset.id) ? b.dataset.id : +b.dataset.id;
@@ -866,7 +946,7 @@ function renderSummary() {
     state.account === "all" ? "All accounts" : view[0].label;
   document.getElementById("viewSub").textContent =
     state.account === "all"
-      ? `${view.length} accounts · ${DATA.transactions.length.toLocaleString()} transactions`
+      ? `${view.length} accounts · ${DATA.real.length.toLocaleString()} transactions`
       : `${view[0].bank} · ${view[0].bsb ? view[0].bsb + "-" : ""}${view[0].number} · ${view[0].count.toLocaleString()} transactions`;
 
   const card = (label, value, cls, note) =>
@@ -1024,7 +1104,10 @@ function renderYears() {
   const rows = rowsFor(state.account, null);
   const years = [...new Set(rows.map(t => yearOf(t.date)))].sort().reverse();
   if (state.year && !years.includes(state.year)) state.year = undefined;
-  if (state.year === undefined) state.year = years[0] || null;
+  // Opens on the newest year with bank rows. A plan running to 2031 must not
+  // make the page open on a year holding nothing but what-ifs.
+  if (state.year === undefined)
+    state.year = years.find(y => rows.some(t => !t.whatif && yearOf(t.date) === y)) || years[0] || null;
 
   const box = document.getElementById("years");
   // Rebuilding this row while a date box has focus sends the caret back to the
@@ -1080,10 +1163,11 @@ const CHEVRON = `<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="tr
 // Commas come out so "1234" finds "-$1,234.56"; the amount goes in both
 // formatted and plain so "-1234.56" and "1234.56" both land. The running
 // balance stays out, or "50.00" would also find every row that left $50.00 in
-// the account, and count it in the caption totals.
+// the account, and count it in the caption totals. "what-if" finds the plans.
 const haystack = t => t._find || (t._find = [
   t.date, t.spent_on || "", t.description, t.category || "", t.type,
   money(t.amount), (t.amount / 100).toFixed(2), labelOf(t.account),
+  t.whatif ? "what-if" : "",
 ].join(" ").toLowerCase().replace(/,/g, ""));
 
 // Substring, anywhere, in any order. Typing "coles" finds it mid-description;
@@ -1141,13 +1225,26 @@ function tableBody(rows, {column, hideCategory}) {
     const last = column === "account"
       ? `<td class="bal">${esc(labelOf(t.account))}</td>`
       : `<td class="r bal num">${t.balance === null ? "" : money(t.balance)}</td>`;
-    return `<tr${t.provisional ? ' class="provisional"' : ""}>
-      <td class="date num">${day(t)}</td>
-      <td class="desc" title="${esc(t.description)}${t.provisional
+    // data-edit names the field a double-click on the cell edits. Only a row
+    // entered by hand can have its date or amount changed, or be deleted: a
+    // bank row is the bank's, so those two cells carry no data-edit on it.
+    // The type tag names its own field, since it shares the cell with the
+    // category. The row's id and series size sit on the <tr>.
+    return `<tr class="${t.whatif ? "whatif" : t.provisional ? "provisional" : ""}" data-id="${t.id}"
+        data-series="${t.series || 0}">
+      <td class="date num"${t.manual ? ' data-edit="date"' : ""}>${t.manual
+          ? '<button class="rowbtn del" type="button" aria-label="Delete this row" title="Delete">×</button>' : ""}${day(t)}</td>
+      <td class="desc" data-edit="description" title="${esc(t.description)}${t.provisional
           ? " — not yet confirmed by the bank, this row may still change" : ""}">${esc(t.description)}</td>
-      <td class="tags"><span class="tag ${cls}">${esc(t.type)}</span>${t.category && !hideCategory
-          ? ` <span class="tag" title="${esc(t.category)}" style="--tag:${colourFor(t.category)}">${esc(t.category)}</span>` : ""}</td>
-      <td class="r amt num ${cls}">${money(t.amount, true)}</td>
+      <td class="tags" data-edit="category">${t.whatif
+          ? `<span class="tag whatif" title="${t.covered
+              ? "The bank's rows now cover this day. Delete this what-if if it happened, or it is counted twice."
+              : "A plan you entered. The bank has no such row."}">what-if${t.covered ? " · covered" : ""}</span> `
+          : t.covered
+          ? `<span class="tag whatif" title="The bank's rows now cover this day. Delete this row if the bank lists it, or it is counted twice.">covered</span> `
+          : ""}<span class="tag ${cls}" data-edit="type">${esc(t.type)}</span>${t.category && !hideCategory
+          ? ` <span class="tag cat" title="${esc(t.category)}" style="--tag:${colourFor(t.category)}">${esc(t.category)}</span>` : ""}</td>
+      <td class="r amt num ${cls}"${t.manual ? ' data-edit="amount"' : ""}>${money(t.amount, true)}</td>
       ${last}
     </tr>`;
   }).join("") || '<tr><td colspan="5" class="empty">No transactions</td></tr>';
@@ -1189,6 +1286,7 @@ function transactionTable(title, rows, {column = "balance", hideCategory = false
         : '<th class="bal r">Balance</th>'}
     </tr></thead>
     <tbody>${tableBody(rows, opts)}</tbody>
+    ${column === "balance" ? `<tfoot><tr class="add">${ADD_REST}</tr></tfoot>` : ""}
   </table></div>`;
 }
 
@@ -1227,7 +1325,8 @@ const KINDS = {
 // Deposits never reconcile to the cent, and the reasons are worth spelling
 // out rather than leaving as an unexplained gap.
 function depositExplainer(held) {
-  const of = name => DATA.transactions.filter(t => t.category === name);
+  // Real rows, whatever the toggle: a planned deposit is not on deposit.
+  const of = name => DATA.real.filter(t => t.category === name);
   const into = of("Term deposit").filter(t => t.amount < 0).reduce((n, t) => n + t.amount, 0);
   const back = of("Term deposit").filter(t => t.amount > 0).reduce((n, t) => n + t.amount, 0);
   // Deposit interest by the banks' own wording, not by category. The Interest
@@ -1345,12 +1444,8 @@ function renderHoldings(kind) {
   form.onsubmit = async event => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(form));
-    // Commas only where a thousands separator belongs. Stripping them blindly
-    // turned a typo like "50000,25" into $5,000,025.00 without a word.
-    const typed = String(data.balance).replace(/[$\s]/g, "");
-    if (!/^-?\d{1,3}(,\d{3})*(\.\d{1,2})?$|^-?\d+(\.\d{1,2})?$/.test(typed))
-      return alert("Balance must be an amount, like 1234.56 or 1,234.56");
-    const dollars = Number(typed.replace(/,/g, ""));
+    const balance = cents(data.balance);
+    if (balance === null) return alert("Balance must be an amount, like 1234.56 or 1,234.56");
     // Disabled while saving, so a double click cannot add the holding twice.
     // A successful save redraws the form; after a failure it has to work again.
     const button = form.querySelector("[type=submit]");
@@ -1360,7 +1455,7 @@ function renderHoldings(kind) {
       id: data.id ? +data.id : undefined,
       name: data.name.trim(),
       institution: data.institution.trim() || null,
-      balance: Math.round(dollars * 100),
+      balance,
       as_at: data.as_at || null,
     });
     button.disabled = false;
@@ -1453,11 +1548,14 @@ const spentOn = t => t.spent_on || t.date;
 // share this, so the two cards always cover exactly the same days.
 function windowRows(type) {
   const chosen = analysis.accounts;
+  // A period with no To of its own ends today: a plan dated next year is not
+  // in "the last 12 months". A To past today brings the plans in on purpose.
+  const to = analysis.to || isoDay(new Date());
   return DATA.transactions.filter(t =>
     t.type === type &&
     (!chosen || chosen.has(t.account)) &&
     (!analysis.from || spentOn(t) >= analysis.from) &&
-    (!analysis.to || spentOn(t) <= analysis.to));
+    spentOn(t) <= to);
 }
 
 function analysisRows() { return windowRows("expense"); }
@@ -1469,7 +1567,12 @@ function incomeRows() { return windowRows("income"); }
 // calendar 2026 divides by the days loaded so far rather than by 365. The
 // category ticks play no part, so the cards and the drill-down share one count.
 function periodDays() {
-  const dates = DATA.transactions.filter(t => analysis.accounts.has(t.account)).map(spentOn).sort();
+  // Without a To of your own the window ends today (see windowRows), so a
+  // plan dated later is not measured either: the period ends on the last row
+  // up to today, not on the plan.
+  const today = isoDay(new Date());
+  const dates = DATA.transactions.filter(t => analysis.accounts.has(t.account)).map(spentOn)
+    .filter(d => analysis.to || d <= today).sort();
   if (!dates.length) return 1;
   const first = dates[0], last = dates[dates.length - 1];
   const from = analysis.from && analysis.from > first ? analysis.from : first;
@@ -1780,6 +1883,188 @@ document.addEventListener("search", event => {
   }
 });
 
+// ---------- editing a row ----------
+// Double-click a cell to change it. One listener for every table, so it keeps
+// working after any re-render. The row's id is on the <tr>; the field is the
+// data-edit attribute on the cell, or on the type tag, which shares its cell
+// with the category.
+const TYPES = ["automatic", "income", "expense", "transfer"];
+const REPEATS = ["once", "weekly", "fortnightly", "monthly", "quarterly", "yearly"];
+const AMOUNT_HINT = "Amount must be a number, like -12.34 or 1,234.56";
+const options = (list, current) =>
+  list.map(v => `<option${v === current ? " selected" : ""}>${v}</option>`).join("");
+
+document.addEventListener("dblclick", event => {
+  const target = event.target.closest && event.target.closest("[data-edit]");
+  // The what-if tag cannot be changed, and a control is not a cell to edit.
+  if (!target || event.target.closest(".tag.whatif, button, input, select")) return;
+  const row = target.closest("tr[data-id]");
+  const t = row && DATA.all.find(x => x.id === +row.dataset.id);
+  if (t) edit(target, t);
+});
+
+function edit(target, t) {
+  const field = target.dataset.edit;
+  const td = target.closest("td");
+  const saved = td.innerHTML;
+  const before = {description: t.description, category: t.category || "", type: t.type,
+                  date: t.date, amount: t.amount}[field];
+  const editor = document.createElement(field === "type" ? "select" : "input");
+  editor.className = "editor";
+  if (field === "type") editor.innerHTML = options(TYPES, t.type);
+  else {
+    editor.type = field === "date" ? "date" : "text";
+    editor.value = field === "amount" ? (t.amount / 100).toFixed(2) : before;
+    if (field === "category") editor.setAttribute("list", "categories");
+    if (field === "amount") editor.inputMode = "decimal";
+  }
+  // The date is the one field the server changes on this row alone.
+  if (t.series && field !== "date") editor.title = `applies to all ${t.series} rows of this series`;
+  // The type and category editors replace their own tag, so the other tag
+  // stays in view. The rest fill the cell.
+  if (field === "type") target.replaceWith(editor);
+  else if (field === "category") {
+    const tag = td.querySelector(".tag.cat");
+    tag ? tag.replaceWith(editor) : td.append(" ", editor);
+  } else td.replaceChildren(editor);
+  editor.focus();
+  if (editor.select) editor.select();
+  // The list opens on the double-click itself. Not every browser has this.
+  if (field === "type") try { editor.showPicker(); } catch {}
+
+  // Enter, blur and the type list's change can all fire for one edit, and the
+  // restore below removes the editor, which blurs it too. The first one wins.
+  let done = false;
+  const finish = async keep => {
+    if (done) return;
+    done = true;
+    // Chrome blurs an editor a re-render removes, Firefox does not. Neither
+    // saves: pressing Back is not pressing Enter.
+    if (!editor.isConnected) keep = false;
+    let value;
+    if (keep) {
+      value = field === "amount" ? cents(editor.value) : editor.value.trim();
+      if (field === "amount" && value === null) {
+        alert(AMOUNT_HINT);
+        keep = false;
+      }
+      // A date the browser could not complete arrives as "": nothing to save.
+      if (field === "date" && !value) keep = false;
+    }
+    if (!keep || value === before) { td.innerHTML = saved; return; }
+    td.setAttribute("aria-busy", "true");
+    editor.disabled = true;
+    try {
+      await request("/api/txn/" + t.id, {method: "POST", headers: {"Content-Type": "application/json"},
+                                         body: JSON.stringify({[field]: value})});
+    } catch (e) {
+      alert("Could not save: " + e.message);
+      td.innerHTML = saved;
+      td.removeAttribute("aria-busy");
+      return;
+    }
+    await reload();
+  };
+  editor.addEventListener("keydown", event => {
+    // Stopped here: Escape would otherwise close the drill-down under the
+    // editor, and the page's own Escape and Enter handling has no part in this.
+    if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); event.stopPropagation(); finish(true); }
+    if (event.key === "Escape") { event.stopPropagation(); finish(false); }
+  });
+  editor.addEventListener("blur", () => finish(true));
+  // Picking from the list is the whole edit; no Enter needed after it.
+  if (field === "type") editor.addEventListener("change", () => finish(true));
+}
+
+// ---------- adding a row ----------
+// Every ledger table ends with a "+ add" line. Opened, it is one cell across
+// the table holding the inputs. Enter anywhere in it saves; Escape puts
+// "+ add" back. It lives in the table's foot, which a search leaves alone.
+const ADD_REST = '<td></td><td class="desc"><button class="rowbtn addbtn" type="button">+ add</button></td>'
+               + '<td></td><td></td><td></td>';
+
+document.addEventListener("click", event => {
+  const button = event.target.closest && event.target.closest(".addbtn");
+  if (button) openAdd(button.closest("tr"));
+});
+
+function openAdd(row) {
+  row.innerHTML = `<td colspan="5"><div class="addform">
+    <input type="date" name="date" value="${isoDay(new Date())}" aria-label="Date">
+    <input name="description" maxlength="200" placeholder="Description" aria-label="Description">
+    <select name="type" aria-label="Type">${options(TYPES, "automatic")}</select>
+    <input name="category" list="categories" placeholder="Category" aria-label="Category">
+    <input name="amount" inputmode="decimal" placeholder="-12.34" aria-label="Amount in dollars">
+    <label><input type="checkbox" name="whatif" checked> what-if</label>
+    <select name="repeat" aria-label="Repeat">${options(REPEATS, "once")}</select>
+    <input type="date" name="until" aria-label="Until" hidden></div></td>`;
+  row.querySelector("[name=repeat]").onchange = event =>
+    row.querySelector("[name=until]").hidden = event.target.value === "once";
+  row.onkeydown = event => {
+    // Stopped here, so Escape does not go on to close anything else.
+    if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); event.stopPropagation(); submitAdd(row); }
+    if (event.key === "Escape") { event.stopPropagation(); closeAdd(row); }
+  };
+  row.querySelector("[name=description]").focus();
+}
+
+function closeAdd(row) {
+  row.innerHTML = ADD_REST;
+  row.onkeydown = null;
+  row.querySelector(".addbtn").focus();
+}
+
+async function submitAdd(row) {
+  if (row.getAttribute("aria-busy") === "true") return;      // a second Enter while the first saves
+  const value = name => row.querySelector(`[name=${name}]`).value.trim();
+  const amount = cents(value("amount"));
+  if (amount === null) return alert(AMOUNT_HINT);
+  const repeat = value("repeat");
+  const body = {
+    account: +row.closest(".tablewrap").dataset.table,
+    date: value("date"), description: value("description"), amount, type: value("type"),
+    category: value("category") || null, whatif: row.querySelector("[name=whatif]").checked,
+    repeat, until: repeat === "once" ? null : value("until") || null,
+  };
+  row.setAttribute("aria-busy", "true");
+  try {
+    await request("/api/txn", {method: "POST", headers: {"Content-Type": "application/json"},
+                               body: JSON.stringify(body)});
+  } catch (e) {
+    // The inputs stay, so a refused row can be corrected rather than retyped.
+    alert("Could not add: " + e.message);
+    row.removeAttribute("aria-busy");
+    return;
+  }
+  await reload();
+  // reload() rebuilt the table. Focus its "+ add" again, where the row began.
+  document.querySelector(`.tablewrap[data-table="${body.account}"] .addbtn`)?.focus({preventScroll: true});
+}
+
+// ---------- deleting a row ----------
+// Only rows entered by hand have the ×. A series goes as a whole, after a
+// word; a single row goes at once, since putting it back is one line.
+document.addEventListener("click", async event => {
+  const button = event.target.closest && event.target.closest(".del");
+  if (!button) return;
+  const row = button.closest("tr");
+  const series = +row.dataset.series;
+  if (series && !confirm(`Delete all ${series} rows of this series?`)) return;
+  button.disabled = true;
+  const table = row.closest(".tablewrap").dataset.table;
+  try {
+    await request("/api/txn/" + row.dataset.id, {method: "DELETE"});
+  } catch (e) {
+    alert("Could not delete: " + e.message);
+    button.disabled = false;
+    return;
+  }
+  await reload();
+  // The × went with its row. The table's "+ add" is the nearest thing left
+  // to focus; the drill-down has none.
+  document.querySelector(`.tablewrap[data-table="${table}"] .addbtn`)?.focus({preventScroll: true});
+});
+
 function overviewBody(rows, ranked, spent, days, listed, {income, deposits, net}) {
   // Bars are drawn against the largest category in the whole list, not the
   // largest included one, so they stay put as you tick things on and off.
@@ -2009,7 +2294,7 @@ function renderRules() {
     return `<tr>
       <td><span class="tag" title="${esc(r.category)}" style="--tag:${colourFor(r.category)}">${esc(r.category)}</span></td>
       <td><code>${pattern}</code></td>
-      <td class="r num">${r.matches}</td>
+      <td class="r num" data-hits="${r.id}">…</td>
       <td class="r amt num ${total < 0 ? "out" : "in"}">${money(total)}</td>
       <td class="r"><button class="rowbtn" data-delrule="${r.id}">remove</button></td>
     </tr>`;
@@ -2050,6 +2335,18 @@ function renderRules() {
       </form>
     </div>`;
 
+  // Hit counts are not in data.json: matching every pattern against every row
+  // took most of the export's time, and only this page shows them. They arrive
+  // a moment after the table, into the cells still on screen. A failed count
+  // leaves the dots; nothing else on the page depends on it.
+  request("/api/rules").then(rules => {
+    if (state.account !== "rules") return;
+    for (const r of rules) {
+      const cell = document.querySelector(`#rules [data-hits="${r.id}"]`);
+      if (cell) cell.textContent = r.matches;
+    }
+  }).catch(() => {});
+
   document.getElementById("ruleForm").onsubmit = async event => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(event.target));
@@ -2058,7 +2355,7 @@ function renderRules() {
     const button = event.target.querySelector("[type=submit]");
     button.disabled = true;
     try {
-      DATA.rules = await request("/api/rules", {
+      await request("/api/rules", {
         method: "POST", headers: {"Content-Type": "application/json"},
         body: JSON.stringify({category: data.category.trim(), pattern: data.pattern.trim()}),
       });
@@ -2071,16 +2368,27 @@ function renderRules() {
     if (!confirm(`Remove the rule labelling "${rule.pattern}" as ${rule.category}? `
                  + "Its transactions are relabelled by the rules that remain.")) return;
     try {
-      DATA.rules = await request("/api/rules/" + b.dataset.delrule, {method: "DELETE"});
+      await request("/api/rules/" + b.dataset.delrule, {method: "DELETE"});
       await reload();
     } catch (e) { alert("Could not remove: " + e.message); }
   });
 }
 
-// Rules relabel every transaction, so the whole export is rebuilt server side.
+// data.json in, with the rows split by the what-if tag. Every view reads
+// DATA.transactions, which render() sets from the toggle. DATA.real is for the
+// figures that must never include a plan: the counts in the sidebar and the
+// page header, and what the statements say about term deposits.
+function takeData(fresh) {
+  DATA = Object.assign(DATA || {}, fresh);
+  DATA.holdings = DATA.holdings || [];
+  DATA.rules = DATA.rules || [];
+  DATA.all = DATA.transactions;
+  DATA.real = DATA.all.filter(t => !t.whatif);
+}
+
+// Any change to a row, or to the rules, rebuilds the whole export server side.
 async function reload() {
-  const fresh = await request("data.json?t=" + Date.now());
-  Object.assign(DATA, fresh);
+  takeData(await request("data.json?t=" + Date.now()));
   render();
 }
 
@@ -2141,6 +2449,8 @@ function writeUrl() {
   if (analysis.accounts && analysis.accounts.size !== DATA.accounts.length)
     p.set("accts", [...analysis.accounts].join(","));
   if (analysis.hidden.size) p.set("hide", [...analysis.hidden].join("~"));
+  // Hidden what-ifs are the exception, so only that goes in the URL.
+  if (!state.whatif) p.set("whatif", "0");
   // Only the analysis view has a drill-down. render() closes it on the others,
   // but after this has run.
   if (analysis.category && state.account === "analysis") p.set("cat", analysis.category);
@@ -2190,12 +2500,14 @@ function readUrl(search = location.search) {
     }
   }
   // These reset when absent, so Back and the agent's "" can close the
-  // drill-down, drop a search, or bring back every account and category.
+  // drill-down, drop a search, bring back every account and category, or
+  // show the what-ifs again.
   analysis.accounts = p.has("accts") ? new Set(p.get("accts").split(",").map(Number)) : null;
   analysis.hidden = new Set(p.get("hide") ? p.get("hide").split("~") : []);
   analysis.category = p.get("cat");
   find.query = p.get("q") || "";
   find.table = p.get("qt");
+  state.whatif = p.get("whatif") !== "0";
 }
 
 // Back and Forward: redraw from the entry the browser moved to. Clearing `place`
@@ -2376,6 +2688,7 @@ function describeView(params) {
   }
   if ("cat" in params && analysis.category) parts.push(`${analysis.category} in detail`);
   if ("q" in params && find.query) parts.push(`search “${find.query}”`);
+  if ("whatif" in params) parts.push(state.whatif ? "what-ifs shown" : "what-ifs hidden");
   return parts.join(" · ") || "a different view";
 }
 
@@ -2656,6 +2969,14 @@ function wireAgent() {
 }
 
 function render() {
+  // The toggle: every view reads DATA.transactions, so hiding the plans is
+  // one line here rather than a filter in each of them.
+  DATA.transactions = state.whatif ? DATA.all : DATA.real;
+  // The category editors' suggestions: every category in use plus the rules'
+  // own, so a name a rule knows but no row carries yet is still offered.
+  document.getElementById("categories").innerHTML =
+    [...new Set([...DATA.all.map(t => t.category), ...DATA.rules.map(r => r.category)])]
+      .filter(Boolean).sort().map(c => `<option value="${esc(c)}">`).join("");
   writeUrl();
   renderSidebar();
   const view = TABS.includes(state.account) ? state.account : "ledger";
@@ -2685,9 +3006,7 @@ function render() {
 fetch("data.json")
   .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status + " " + r.statusText)))
   .then(d => {
-    DATA = d;
-    DATA.holdings = DATA.holdings || [];
-    DATA.rules = DATA.rules || [];
+    takeData(d);
     readUrl();          // needs DATA, to check the account in ?view= still exists
     render();
     wireAgent();

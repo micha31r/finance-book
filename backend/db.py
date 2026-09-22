@@ -11,6 +11,8 @@ ignored, so a statement and a CSV export of one transaction share a key. The
 occurrence counter is what makes it safe. Real statements contain genuinely
 identical transactions on the same day (four $5.00 EFTPOS charges at the same
 shop, for example), so hashing the content alone would silently merge them.
+Rows typed in on the page share the key, with occurrence counting down from -1
+(see manual_occurrence).
 """
 import functools
 import re
@@ -71,6 +73,12 @@ CREATE TABLE IF NOT EXISTS txn (
     provisional    INTEGER NOT NULL DEFAULT 0,
     verified       INTEGER NOT NULL DEFAULT 0,
     sequence       INTEGER NOT NULL DEFAULT 0,
+    -- Rows typed in on the page. whatif marks a plan: it moves no real
+    -- balance and ingest never touches it. series is the id of the first row
+    -- of a repeating plan, on every row of it. connect() adds both to a
+    -- database made before they existed.
+    whatif         INTEGER NOT NULL DEFAULT 0,
+    series         INTEGER,
     UNIQUE (account_id, date, amount, match_key, occurrence)
 );
 CREATE TABLE IF NOT EXISTS transfer (
@@ -88,6 +96,12 @@ CREATE TABLE IF NOT EXISTS manual_type (
     type    TEXT NOT NULL,
     note    TEXT,
     set_at  TEXT NOT NULL
+);
+-- Your category for a transaction, applied after every rule, like manual_type.
+CREATE TABLE IF NOT EXISTS manual_category (
+    txn_id   INTEGER PRIMARY KEY REFERENCES txn(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    set_at   TEXT NOT NULL
 );
 -- Labels income and spending by where it came from or went. A pattern is a
 -- regular expression matched against the description, case-insensitively.
@@ -177,7 +191,29 @@ def connect(path=DEFAULT_PATH):
     # Rules are regexes, and more than one query needs to run them.
     conn.create_function("regexp", 2, regexp)
     conn.executescript(SCHEMA)
+    # CREATE TABLE IF NOT EXISTS leaves an existing txn table as it was, so a
+    # database made before what-ifs gets the two columns here. SCHEMA carries
+    # them as well, so a fresh file needs no ALTER.
+    present = {row["name"] for row in conn.execute("PRAGMA table_info(txn)")}
+    for name, definition in (("whatif", "INTEGER NOT NULL DEFAULT 0"), ("series", "INTEGER")):
+        if name not in present:
+            conn.execute(f"ALTER TABLE txn ADD COLUMN {name} {definition}")
     return conn
+
+
+def last_known_balance(conn, acct_id):
+    """The newest closing balance a document states, with the day it is as at.
+
+    When a statement and a Transaction List end on the same day the statement
+    wins, because the list may predate that day's interest. Rows dated after
+    this day carry the balance on from it, and a real row typed in on the page
+    must be dated after it too: earlier, the bank's own figure already covers
+    the day. None when no document states a balance.
+    """
+    return conn.execute(
+        "SELECT closing_balance, period_end FROM document"
+        " WHERE account_id = ? AND closing_balance IS NOT NULL"
+        " ORDER BY period_end DESC, kind = 'statement' DESC LIMIT 1", (acct_id,)).fetchone()
 
 
 def account_id(conn, doc):
@@ -305,4 +341,64 @@ def write_transactions(conn, acct_id, doc_id, doc, verified):
         removed += conn.execute(
             "DELETE FROM txn WHERE account_id = ? AND provisional = 1 AND date BETWEEN ? AND ?",
             (acct_id, doc.period_start.isoformat(), doc.period_end.isoformat())).rowcount
+    if doc.closing_balance is not None and doc.period_end is not None:
+        # The bank's figure now settles the balance up to period_end, the day a
+        # real row typed in on the page had to be dated after (serve.misdated).
+        # One dated on or before it would move a balance the bank has stated,
+        # so it goes, like a listing's row when the statement arrives. A
+        # what-if stays: it moves nothing.
+        removed += conn.execute(
+            "DELETE FROM txn WHERE account_id = ? AND whatif = 0 AND date <= ?"
+            " AND document_id IN (SELECT id FROM document WHERE kind = 'manual')",
+            (acct_id, doc.period_end.isoformat())).rowcount
     return inserted, upgraded, unchanged, removed
+
+
+def manual_document(conn, acct_id):
+    """The document that holds an account's hand-entered rows, made on first use.
+
+    It has no period and no balance: it covers no span of time and states
+    nothing about the account, so last_known_balance never picks it. The
+    unique index treats its NULL periods as distinct, so it is looked up
+    before it is inserted. It stays once its rows are gone; empty, it is
+    harmless.
+    """
+    row = conn.execute("SELECT id FROM document WHERE account_id = ? AND kind = 'manual'",
+                       (acct_id,)).fetchone()
+    if row:
+        return row["id"]
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return conn.execute(
+        "INSERT INTO document(account_id, kind, source_name, ingested_at)"
+        " VALUES (?, 'manual', 'entered by hand', ?)", (acct_id, now)).lastrowid
+
+
+def manual_occurrence(conn, acct_id, day, amount, key):
+    """The next occurrence for a hand-entered row with this key.
+
+    Bank rows count up from 1, hand rows down from -1, so the two never meet:
+    ingest's lookup never finds a hand row, two identical what-ifs on one day
+    both insert, and the statement that later lists a real one inserts its
+    own row instead of failing on the key.
+    """
+    return conn.execute(
+        "SELECT COALESCE(MIN(occurrence), 0) - 1 FROM txn WHERE account_id = ? AND date = ?"
+        " AND amount = ? AND match_key = ? AND occurrence < 0",
+        (acct_id, day, amount, key)).fetchone()[0]
+
+
+def add_manual(conn, acct_id, day, description, amount, whatif):
+    """Insert one row typed in on the page. Returns its id.
+
+    A real row is provisional, like a Transaction List's: the statement for
+    that period replaces it. A what-if is not, so ingest never touches it.
+    sequence 1000000 lists it after any bank row on the same day.
+    """
+    key = match_key(description)
+    return conn.execute(
+        "INSERT INTO txn(account_id, document_id, date, amount, match_key, occurrence,"
+        " description, type, provisional, whatif, sequence)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,1000000)",
+        (acct_id, manual_document(conn, acct_id), day, amount, key,
+         manual_occurrence(conn, acct_id, day, amount, key), description,
+         "income" if amount > 0 else "expense", int(not whatif), int(whatif))).lastrowid
