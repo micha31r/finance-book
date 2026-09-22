@@ -289,12 +289,18 @@ async def read_rows_tool(args):
            "view": {"type": "string",
                     "description": "'all', 'analysis', 'holdings', 'investments', 'rules', "
                                    "or an account id"},
-           "year": {"type": "string", "description": "'2026', or 'all'. Account views only"},
+           "year": {"type": "string",
+                    "description": "'2026', or 'all'. Account views only: it picks a calendar "
+                                   "year and clears the date range"},
            "period": {"type": "string",
                       "description": "30d, 3m, 6m, 12m, ytd or all (spending analysis). "
                                      "Use period or from/to: setting one clears the other"},
-           "from": {"type": "string", "description": "first day, YYYY-MM-DD, inclusive"},
-           "to": {"type": "string", "description": "last day, YYYY-MM-DD, inclusive"},
+           "from": {"type": "string",
+                    "description": "first day of the date range, YYYY-MM-DD, inclusive. The "
+                                   "range is the period on the spending analysis page, or a "
+                                   "custom range on an account view"},
+           "to": {"type": "string",
+                  "description": "last day of the date range, YYYY-MM-DD, inclusive"},
            "accts": {"type": "string", "description": "comma separated account ids"},
            "hide": {"type": "string",
                     "description": "categories to leave OUT of the totals, separated by ~. "
@@ -373,7 +379,9 @@ knows — which payee is a relative, what counts as "eating out" — ask them ra
 than guessing. Say plainly when the data cannot answer something.
 
 When your answer is about something the page can show, call `set_view` so they
-are looking at it. To show only some categories, `hide` all the others."""
+are looking at it. The spending analysis page shows income, spending and net for
+its period. Account views show money in, money out and net for a year or a date
+range. To show only some categories, `hide` all the others."""
 
 
 async def stream(prompt, session=None):

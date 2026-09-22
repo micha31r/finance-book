@@ -129,6 +129,12 @@
              margin-top: 6px; letter-spacing: -0.01em; }
   .card .note { font-family: var(--mono); }
   .card .note { font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
+  /* The Net cards are the one place a card goes green or red. A surplus or a
+     loss is a verdict, and blurple-or-ink only says which sign it has. Zero
+     stays desaturated, like a transfer: neither. */
+  .card .v.gain { color: var(--gain); }
+  .card .v.loss { color: var(--loss); }
+  .card .v.even { color: var(--move); }
 
   .panel { background: var(--panel); border: 1px solid var(--line); padding: 14px 16px;
            margin-bottom: var(--gap); min-width: 0; }
@@ -154,6 +160,10 @@
   }
   .years button:hover { color: var(--ink); border-color: var(--ink-faint); }
   .years button[aria-current="true"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  /* From and To wear the analysis page's date input box: the `.picker label`
+     rule below covers both. Only the height differs, to line them up with the
+     year buttons beside them. */
+  .years label { height: 32px; }
 
   /* ---------- table ---------- */
   .tablewrap { background: var(--panel); border: 1px solid var(--line); }
@@ -185,6 +195,18 @@
     color: var(--ink-faint); line-height: 0;
   }
   .findbtn:hover { color: var(--ink); }
+  /* On All accounts the chevron and the account name are one button, so the
+     whole name opens the table, not a 12px arrow. */
+  .fold {
+    display: inline-flex; align-items: center; gap: 7px; padding: 0;
+    background: none; border: 0; border-radius: 0; cursor: pointer;
+    color: inherit; font: inherit;
+  }
+  .fold svg { flex: none; color: var(--ink-faint); transition: transform .15s; }
+  .fold:hover svg { color: var(--ink); }
+  .fold[aria-expanded="true"] svg { transform: rotate(90deg); }
+  /* The strip's own rule would double the box's border on a collapsed table. */
+  .tablewrap:has(> table[hidden]) .tcap { border-bottom: 0; }
   /* No taller than the account name beside it, so opening the search does not
      make the strip grow. */
   .tcap .find {
@@ -276,7 +298,8 @@
   /* In the transaction tables money reads the way a bank statement does:
      income green, spending red, transfers left grey because they are neither.
      The amount, the type badge and the in/out figures in the header strip all
-     agree. The rest of the app, cards and charts included, keeps its purple. */
+     agree. The rest of the app keeps its purple, except the Net cards, which
+     take the same green and red. */
   table.rows td.amt.in, .tcap .meta .in { color: var(--gain); }
   table.rows td.amt.out, .tcap .meta .out { color: var(--loss); }
   table.rows .tag.in { --tag: var(--gain); }
@@ -289,7 +312,7 @@
               margin-bottom: var(--gap); }
   .controls > div { min-width: 0; }
   .picker { display: flex; flex-wrap: wrap; gap: 6px; }
-  .picker label {
+  .picker label, .years label {
     display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;
     border: 1px solid var(--line); background: transparent;
     padding: 5px 12px 5px 9px; font-size: 13px; color: var(--ink-dim);
@@ -656,6 +679,9 @@ const compact = c => {
   // No minus on a figure that rounds to zero: -$0.30 read "-$0".
   return (c < 0 && text !== "0" ? "-" : "") + "$" + text;
 };
+// "1 transaction", not "1 transactions".
+const plural = (n, word) => `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 // The export stamp is written in UTC. Show it in the reader's own time zone:
 // "when did this last run" only means anything in the time you live in.
@@ -669,6 +695,12 @@ const stamp = iso => {
 };
 const monthOf = date => date.slice(0, 7);
 const yearOf  = date => date.slice(0, 4);
+// "1 Mar 2026". The month comes from MONTHS for the same reason stamp's does:
+// toLocaleDateString writes September as "Sept" under en-AU.
+const dayLabel = day => {
+  const [y, m, d] = day.split("-");
+  return `${+d} ${MONTHS[+m - 1]} ${y}`;
+};
 // Dozens of categories have to be told apart at a glance, so hues are spread by
 // the golden angle over the alphabetical list — hashing the name collided badly,
 // putting four categories within six degrees of each other. Saturation stays low
@@ -694,7 +726,10 @@ const MONTH_LABEL = m => {
 // state.year: a "2026" string, null for every year, undefined for not chosen
 // yet. Keeping "not chosen" distinct from "all" is what lets the All years
 // button stick instead of being overwritten by the default below.
-let DATA, state = {account: "all", year: undefined};
+// state.from and state.to are a custom range on an account view, an alternative
+// to the year. Setting either sets year to null, so no year button lights up and
+// the default newest year cannot come back over the top of the range.
+let DATA, state = {account: "all", year: undefined, from: null, to: null};
 const charts = {};
 
 // ---------- selection ----------
@@ -709,8 +744,25 @@ const netWorth = () => accountsTotal() + DATA.holdings.reduce((n, h) => n + h.ba
 const accountsInView = () =>
   state.account === "all" ? DATA.accounts : DATA.accounts.filter(a => a.id === state.account);
 
-const rowsFor = (accountId, year) => DATA.transactions.filter(t =>
-  (accountId === "all" || t.account === accountId) && (!year || yearOf(t.date) === year));
+// By posting date, which is what the year buttons and the running balances go
+// by. Only a From runs to the last transaction; only a To starts at the first.
+const rowsFor = (accountId, year, from, to) => DATA.transactions.filter(t =>
+  (accountId === "all" || t.account === accountId) && (!year || yearOf(t.date) === year)
+  && (!from || t.date >= from) && (!to || t.date <= to));
+
+// The rows an account view is showing: its year, or its custom range.
+const viewRows = accountId => rowsFor(accountId, state.year, state.from, state.to);
+
+// The range in words, or "" when there is none. A range open at one end names
+// only the day it was given. The other end is the first or last transaction,
+// which is not a day worth printing.
+const rangeLabel = () =>
+  state.from && state.to ? `${dayLabel(state.from)} to ${dayLabel(state.to)}`
+  : state.from ? `from ${dayLabel(state.from)}`
+  : state.to ? `to ${dayLabel(state.to)}` : "";
+
+// What the cards, the table titles and the agent's line call the period on show.
+const periodLabel = () => rangeLabel() || state.year || "all years";
 
 // Income and spending never include transfers. Moving your own money between
 // accounts is not earning or spending it, and treating it as either is the
@@ -723,6 +775,10 @@ function totals(rows) {
   }
   return {income, spend, net: income - spend, count: rows.length};
 }
+
+// Green for a surplus, red for a loss, neither for zero. Only the Net cards
+// use it: Money in and Money out keep the page's blurple and ink.
+const tone = n => n > 0 ? "gain" : n < 0 ? "loss" : "even";
 
 // ---------- sidebar ----------
 function renderSidebar() {
@@ -797,12 +853,13 @@ function renderSidebar() {
 // ---------- header, cards ----------
 function renderSummary() {
   const view = accountsInView();
-  // state.year, not null. The cards used to be all-time while the charts and
-  // tables beside them obeyed the year buttons, so the page opened with 2026
-  // lit up and cards showing four years of totals, about seven times too high.
-  const rows = rowsFor(state.account, state.year);
+  // The period on show, not all time. The cards used to be all-time while the
+  // charts and tables beside them obeyed the year buttons, so the page opened
+  // with 2026 lit up and cards showing four years of totals, about seven times
+  // too high.
+  const rows = viewRows(state.account);
   const sum = totals(rows);
-  const period = state.year || "all years";
+  const period = periodLabel();
   const balance = view.reduce((n, a) => n + (a.balance || 0), 0);
 
   document.getElementById("viewName").textContent =
@@ -838,7 +895,7 @@ function renderSummary() {
     first +
     card("Money in", money(sum.income), "in", `${period} · excludes transfers`) +
     card("Money out", money(sum.spend), "out", `${period} · excludes transfers`) +
-    card("Net", money(sum.net, true), sum.net >= 0 ? "in" : "out", `${period} · in minus out`);
+    card("Net", money(sum.net, true), tone(sum.net), `${period} · in minus out`);
 }
 
 // ---------- charts ----------
@@ -897,7 +954,7 @@ function baseOptions(extra = {}) {
 }
 
 function renderCharts() {
-  const rows = rowsFor(state.account, state.year);
+  const rows = viewRows(state.account);
   // Every month from the first row to the last by posting date, so a month
   // with no rows shows as a gap instead of being skipped.
   const months = monthsSpanning(rows, t => t.date);
@@ -970,14 +1027,39 @@ function renderYears() {
   if (state.year === undefined) state.year = years[0] || null;
 
   const box = document.getElementById("years");
+  // Rebuilding this row while a date box has focus sends the caret back to the
+  // first segment, so the next digit lands in the wrong one: editing 11/03 to
+  // December gave 2 January. While one is being typed in, only move the light.
+  const current = y => String(y ? state.year === y : state.year === null && !state.from && !state.to);
+  if (box.contains(document.activeElement) && document.activeElement.type === "date") {
+    box.querySelectorAll("button").forEach(b => b.setAttribute("aria-current", current(b.dataset.y)));
+    return years;
+  }
   box.innerHTML = years.map(y =>
     `<button data-y="${y}" aria-current="${state.year === y}">${y}</button>`).join("")
-    + `<button data-y="" aria-current="${state.year === null}">All years</button>`;
+    // All years means no filter at all, so a range showing takes the light off it.
+    + `<button data-y="" aria-current="${state.year === null && !state.from && !state.to}">All years</button>`
+    + `<label style="padding:0"><input type="date" class="range-from" aria-label="From" value="${state.from || ""}"
+        style="border:0;background:none;font:inherit;color:inherit;padding:5px 8px"></label>`
+    + `<label style="padding:0"><input type="date" class="range-to" aria-label="To" value="${state.to || ""}"
+        style="border:0;background:none;font:inherit;color:inherit;padding:5px 8px"></label>`;
   box.querySelectorAll("button").forEach(b => b.onclick = () => {
+    // A year replaces the range, and All years clears both.
     state.year = b.dataset.y || null;
+    state.from = state.to = null;
     render();
     // render() rebuilt these buttons. Focus the new copy of this one.
     box.querySelector(`button[data-y="${b.dataset.y}"]`).focus();
+  });
+  // A date input fires `change` as each segment is completed, so typing 2026
+  // into the year arrives as 0002, 0020, 0202 and only then 2026. The year also
+  // takes six digits, so 20260925 typed straight in becomes the year 260925.
+  // Only a real day counts; anything else leaves the page as it is.
+  box.querySelectorAll("input").forEach(input => input.onchange = () => {
+    if (input.value && !isDay(input.value)) return;
+    state[input.classList.contains("range-from") ? "from" : "to"] = input.value || null;
+    state.year = null;          // a typed date is not a year; see state above
+    render();
   });
   return years;
 }
@@ -987,6 +1069,11 @@ const labelOf = id => (DATA.accounts.find(a => a.id === id) || {}).label || "";
 const SEARCH_ICON = `<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
   <circle cx="7" cy="7" r="4.4" fill="none" stroke="currentColor" stroke-width="1.6"/>
   <path d="M10.6 10.6 14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+</svg>`;
+// Points right when the table is folded, and turns down when it is open.
+const CHEVRON = `<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+  <path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.6"
+        stroke-linecap="round" stroke-linejoin="round"/>
 </svg>`;
 
 // Everything about a row that is worth searching, in one lowercase string.
@@ -1017,6 +1104,26 @@ function searchRows(rows, query) {
 // Keyed by account id, or "drill" for the drill-down, not by title: two
 // accounts can share a label, and a title changes with the year.
 const tables = new Map();       // key -> {rows, opts}
+
+// Which account tables on All accounts are open, by account id. They start
+// collapsed, since nine full ledgers is a long scroll to find one, and the ones
+// you open stay open across a refresh. Saved in this browser only.
+const OPEN_KEY = "finance-book.open";
+let openTables;
+try { openTables = new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || "[]")); }
+catch { openTables = new Set(); }
+
+function setOpen(wrap, open) {
+  wrap.querySelector(".fold").setAttribute("aria-expanded", String(open));
+  wrap.querySelector("table").hidden = !open;
+  // A search cannot run in a table you cannot see.
+  if (!open && !wrap.querySelector(".find").hidden) closeFind(wrap);
+  openTables[open ? "add" : "delete"](wrap.dataset.table);
+  try { localStorage.setItem(OPEN_KEY, JSON.stringify([...openTables])); } catch {}
+}
+
+// Searching a folded table opens it first. A table with no fold is left alone.
+const unfold = wrap => { if (wrap.querySelector(".fold")) setOpen(wrap, true); };
 
 function tableBody(rows, {column, hideCategory}) {
   // The drill-down, the table with an account column, picks its rows by the day
@@ -1057,18 +1164,21 @@ function tableMeta(rows) {
 // drill-down. They differ only in the last column: a ledger wants the running
 // balance, a category spanning several accounts wants to say which account.
 // `key` names the table for searching: the account id, or "drill" if not given.
-function transactionTable(title, rows, {column = "balance", hideCategory = false, key = "drill"} = {}) {
+// `fold` is true or false for a table that folds, open or collapsed, and left
+// out for one that does not.
+function transactionTable(title, rows, {column = "balance", hideCategory = false, key = "drill", fold} = {}) {
   const opts = {column, hideCategory};
   tables.set(String(key), {rows, opts});
 
   return `<div class="tablewrap" data-table="${key}"><div class="tcap">
-      <span class="grp">${esc(title)}</span>
+      ${fold === undefined ? `<span class="grp">${esc(title)}</span>`
+        : `<button class="fold" aria-expanded="${fold}">${CHEVRON}<span class="grp">${esc(title)}</span></button>`}
       <button class="findbtn" aria-label="Search these transactions"
               title="Search these transactions">${SEARCH_ICON}</button>
       <input class="find" type="search" placeholder="Search…" hidden
              aria-label="Search these transactions">
       <span class="meta">${tableMeta(rows)}</span>
-    </div><table class="rows">
+    </div><table class="rows"${fold === false ? " hidden" : ""}>
     <!-- Only Description is sized, and it is sized to absorb the slack. Every
          other column is left alone so it sits at its own content width. -->
     <thead><tr>
@@ -1082,15 +1192,23 @@ function transactionTable(title, rows, {column = "balance", hideCategory = false
   </table></div>`;
 }
 
-const tableFor = (account, year) =>
-  transactionTable(account.label + (year ? " · " + year : ""), rowsFor(account.id, year),
-                   {key: account.id});
+// "ANZ Everyday · 2026", or "ANZ Everyday · 1 Mar 2026 to 15 Sep 2026". All
+// years adds nothing: a title with no period on it already means every year.
+// Only All accounts folds its tables; an account's own page has one table,
+// and hiding it would leave the page empty.
+const tableFor = account =>
+  transactionTable(`${account.bank} ${account.label}` + (rangeLabel() || state.year ? " · " + periodLabel() : ""),
+                   viewRows(account.id),
+                   {key: account.id, fold: state.account === "all" ? openTables.has(String(account.id)) : undefined});
 
 function renderTables() {
   const out = document.getElementById("tables");
-  const view = accountsInView().filter(a => rowsFor(a.id, state.year).length || state.account !== "all");
+  // An account with nothing in the period is left out. A range can empty every
+  // one of them, a single account included, so say so rather than draw a table
+  // with no rows in it.
+  const view = accountsInView().filter(a => viewRows(a.id).length);
   out.innerHTML = view.length
-    ? view.map(a => tableFor(a, state.year)).join('<div style="height:var(--gap)"></div>')
+    ? view.map(tableFor).join('<div style="height:var(--gap)"></div>')
     : '<div class="tablewrap"><div class="empty">No transactions in this period</div></div>';
 }
 
@@ -1331,14 +1449,19 @@ const activePeriod = () => analysis.preset;
 // after the one they were spent in.
 const spentOn = t => t.spent_on || t.date;
 
-function analysisRows() {
+// Rows of one type inside the chosen accounts and period. Income and spending
+// share this, so the two cards always cover exactly the same days.
+function windowRows(type) {
   const chosen = analysis.accounts;
   return DATA.transactions.filter(t =>
-    t.type === "expense" &&
+    t.type === type &&
     (!chosen || chosen.has(t.account)) &&
     (!analysis.from || spentOn(t) >= analysis.from) &&
     (!analysis.to || spentOn(t) <= analysis.to));
 }
+
+function analysisRows() { return windowRows("expense"); }
+function incomeRows() { return windowRows("income"); }
 
 // How many days an average is spread over: the chosen period, cut to the first
 // and last dates loaded for the chosen accounts. A day inside the statements
@@ -1371,15 +1494,34 @@ function renderAnalysis() {
   const ranked = listed.filter(([name]) => !analysis.hidden.has(name));
   const days = periodDays();
 
-  document.getElementById("analysis").innerHTML = `
+  // What you saved. Net weighs income against every expense in the window, not
+  // against the ticked ones, so ticking Rent off cannot make savings look
+  // bigger than they were.
+  const deposits = incomeRows();
+  const income = deposits.reduce((n, t) => n + t.amount, 0);
+  const spentAll = all.reduce((n, t) => n - t.amount, 0);
+  const net = income - spentAll;
+
+  const panel = document.getElementById("analysis");
+  const body = overviewBody(rows, ranked, spent, days, listed, {income, deposits: deposits.length, net});
+  // Rebuilding the controls under the caret sends it back to the first segment,
+  // which made a date impossible to correct. While one is being typed in, only
+  // the part below them is redrawn, and the chips just have their light moved.
+  if (panel.contains(document.activeElement) && document.activeElement.type === "date") {
+    panel.querySelector(".analysis-body").innerHTML = body;
+    panel.querySelectorAll(".period").forEach(chip =>
+      chip.setAttribute("aria-current", String(activePeriod() === chip.dataset.period)));
+  } else {
+    panel.innerHTML = `
     <div class="title"><h2>Spending analysis</h2>
-      <span class="sub">expenses only, transfers between your accounts excluded</span></div>
+      <span class="sub">income and spending, transfers between your accounts excluded</span></div>
     ${controlsHtml()}
-    ${overviewBody(rows, ranked, spent, days, listed)}`;
+    <div class="analysis-body">${body}</div>`;
+    wireControls(panel);
+  }
 
   drawAnalysisCharts(rows, ranked);
-  wireControls(document.getElementById("analysis"));
-  wireCategoryTicks(document.getElementById("analysis"), listed);
+  wireCategoryTicks(panel, listed);
 
   // The same ticked total and day count as the cards and the Share column.
   renderDrill(all, spent, days);
@@ -1470,8 +1612,9 @@ function wireControls(root) {
   // A date input fires `change` as each segment is completed, so typing 2026
   // into the year arrives as 0002, 0020, 0202 and only then 2026. Re-rendering
   // on the early ones rebuilt the field and threw the focus away mid-keystroke,
-  // which made the year impossible to type. Wait for a year that could be real.
-  const settled = value => !value || +value.slice(0, 4) >= 1990;
+  // which made the year impossible to type. Only a real day counts: the year
+  // segment also takes six digits, so 20260925 typed straight in reads as 260925.
+  const settled = value => !value || isDay(value);
   // Typed dates light no preset, except that emptying both boxes is All time.
   const typed = () => { analysis.preset = analysis.from || analysis.to ? null : "all"; render(); };
   root.querySelectorAll(".from-date").forEach(input => input.onchange = () => {
@@ -1599,6 +1742,7 @@ function restoreFind() {
     find.query = "";
     return writeUrl();
   }
+  unfold(wrap);
   const box = wrap.querySelector(".find");
   box.value = find.query;
   box.hidden = false;
@@ -1610,10 +1754,16 @@ document.addEventListener("click", event => {
   const button = event.target.closest && event.target.closest(".findbtn");
   if (!button) return;
   const wrap = button.closest(".tablewrap");
+  unfold(wrap);
   const box = wrap.querySelector(".find");
   box.hidden = false;
   button.hidden = true;
   box.focus();
+});
+
+document.addEventListener("click", event => {
+  const button = event.target.closest && event.target.closest(".fold");
+  if (button) setOpen(button.closest(".tablewrap"), button.getAttribute("aria-expanded") !== "true");
 });
 
 document.addEventListener("input", event => {
@@ -1630,7 +1780,7 @@ document.addEventListener("search", event => {
   }
 });
 
-function overviewBody(rows, ranked, spent, days, listed) {
+function overviewBody(rows, ranked, spent, days, listed, {income, deposits, net}) {
   // Bars are drawn against the largest category in the whole list, not the
   // largest included one, so they stay put as you tick things on and off.
   const widest = listed.length ? listed[0][1].total : 0;
@@ -1651,14 +1801,32 @@ function overviewBody(rows, ranked, spent, days, listed) {
   // From the full list, so ticking Uncategorised off does not read "all labelled".
   const unlabelled = listed.find(([name]) => name === "Uncategorised");
 
+  // The share of income kept, said plainly in either direction. Percentages of
+  // nothing mean nothing, so a period with no income says so instead.
+  // Net is income minus all spending, so the spending behind it is income - net.
+  let netNote = income === 0 ? "no income in this period"
+    : net >= 0 ? `${Math.round(100 * net / income)}% of income saved`
+    // A tiny income makes "x% more than came in" absurd: one 39c interest deposit
+    // in 30 days read 253933%. What income covered stays readable at any size.
+    : `income covered ${Math.round(100 * income / (income - net))}% of spending`;
+  // Total spent has dropped the unticked categories but Net has not. Say so,
+  // or the two cards look like they disagree.
+  if (analysis.hidden.size) netNote += " · counts all spending";
+
   return `
     <div class="cards">
+      <div class="card"><div class="caption">Income</div>
+        <div class="v num in">${money(income)}</div>
+        <div class="note">${plural(deposits, "deposit")}</div></div>
       <div class="card"><div class="caption">Total spent</div>
         <div class="v num out">${money(spent)}</div>
-        <div class="note">${rows.length.toLocaleString()} transactions</div></div>
+        <div class="note">${plural(rows.length, "transaction")}</div></div>
+      <div class="card"><div class="caption">Net</div>
+        <div class="v num ${tone(net)}">${money(net, true)}</div>
+        <div class="note">${netNote}</div></div>
       <div class="card"><div class="caption">Per day</div>
         <div class="v num">${money(Math.round(spent / days))}</div>
-        <div class="note">over ${Math.round(days).toLocaleString()} days</div></div>
+        <div class="note">over ${plural(Math.round(days), "day")}</div></div>
       <div class="card"><div class="caption">Per month</div>
         <div class="v num">${money(Math.round(spent / days * 30.44))}</div>
         <div class="note">average</div></div>
@@ -1717,10 +1885,10 @@ function drillBody(name, rows, days) {
     <div class="cards">
       <div class="card"><div class="caption">Spent here</div>
         <div class="v num out">${money(total)}</div>
-        <div class="note">${rows.length.toLocaleString()} transactions</div></div>
+        <div class="note">${plural(rows.length, "transaction")}</div></div>
       <div class="card"><div class="caption">Per month</div>
         <div class="v num">${money(Math.round(total / days * 30.44))}</div>
-        <div class="note">average over ${Math.round(days).toLocaleString()} days</div></div>
+        <div class="note">average over ${plural(Math.round(days), "day")}</div></div>
       <div class="card"><div class="caption">Typical</div>
         <div class="v num">${money(middle)}</div>
         <div class="note">middle transaction</div></div>
@@ -1955,12 +2123,20 @@ let place = null;
 function writeUrl() {
   const p = new URLSearchParams();
   p.set("view", state.account);
-  if (state.year !== undefined) p.set("year", state.year === null ? "all" : state.year);
-  const period = activePeriod();
-  if (period) p.set("period", period);
-  else {
-    if (analysis.from) p.set("from", analysis.from);
-    if (analysis.to) p.set("to", analysis.to);
+  // from and to are the range of the view on screen: the analysis period, or an
+  // account view's custom range. The other tabs are filtered by neither.
+  if (state.account === "analysis") {
+    const period = activePeriod();
+    if (period) p.set("period", period);
+    else {
+      if (analysis.from) p.set("from", analysis.from);
+      if (analysis.to) p.set("to", analysis.to);
+    }
+  } else if (!TABS.includes(state.account)) {
+    if (state.from || state.to) {
+      if (state.from) p.set("from", state.from);
+      if (state.to) p.set("to", state.to);
+    } else if (state.year !== undefined) p.set("year", state.year === null ? "all" : state.year);
   }
   if (analysis.accounts && analysis.accounts.size !== DATA.accounts.length)
     p.set("accts", [...analysis.accounts].join(","));
@@ -1990,16 +2166,28 @@ function readUrl(search = location.search) {
   else if (view && DATA.accounts.some(a => a.id === +view)) state.account = +view;
 
   const year = p.get("year");
-  if (year) state.year = year === "all" ? null : year;
-
   // An unknown period or a date that is not a real day is ignored, so a bad link
   // opens the default period instead of breaking the page.
   const day = key => isDay(p.get(key)) ? p.get(key) : null;
-  if (PERIODS.some(x => x.key === p.get("period"))) applyPeriod(p.get("period"));
-  else if (day("from") || day("to")) {
-    analysis.from = day("from");
-    analysis.to = day("to");
-    analysis.preset = null;
+  // from and to belong to the view the URL names. On an account view a year and
+  // a range are alternatives, so the one the URL carries clears the other.
+  // Without that, Back from a range to a year would leave both showing.
+  if (state.account === "analysis") {
+    if (PERIODS.some(x => x.key === p.get("period"))) applyPeriod(p.get("period"));
+    else if (day("from") || day("to")) {
+      analysis.from = day("from");
+      analysis.to = day("to");
+      analysis.preset = null;
+    }
+  } else if (!TABS.includes(state.account)) {
+    if (day("from") || day("to")) {
+      state.from = day("from");
+      state.to = day("to");
+      state.year = null;
+    } else {
+      state.from = state.to = null;
+      if (year) state.year = year === "all" ? null : year;
+    }
   }
   // These reset when absent, so Back and the agent's "" can close the
   // drill-down, drop a search, or bring back every account and category.
@@ -2173,9 +2361,10 @@ const VIEW_NAMES = {all: "all accounts", analysis: "spending analysis",
 function describeView(params) {
   const parts = [];
   if ("view" in params) parts.push(VIEW_NAMES[state.account] || labelOf(state.account));
-  // Only a ledger has years, and by now it has settled one.
-  if ("year" in params && !TABS.includes(state.account)) parts.push(state.year || "all years");
-  if (state.account === "analysis" && ("period" in params || "from" in params || "to" in params)) {
+  // Only a ledger has years and ranges, and by now it has settled a period.
+  if (!TABS.includes(state.account) && ("view" in params || "year" in params || "from" in params || "to" in params))
+    parts.push(periodLabel());
+  if (state.account === "analysis" && ("view" in params || "period" in params || "from" in params || "to" in params)) {
     const preset = PERIODS.find(p => p.key === activePeriod());
     if (preset) parts.push({ytd: "this year", all: "all time"}[preset.key] || "last " + preset.label);
     else if (analysis.from || analysis.to)
@@ -2245,13 +2434,23 @@ function agentEvent(turn, event) {
 // re-reading them. Nothing else needs to know the agent exists.
 // "" clears a parameter. A period and a from/to range are alternatives, so
 // setting one drops the other: a period left behind would win over the range.
+// A year and a range are alternatives the same way on an account view.
 // The agent's search names no table, so any old qt goes with it.
 function applyView(params) {
   const url = new URLSearchParams(location.search);
+  // from and to mean a different range on each view, so crossing between the
+  // spending analysis and a ledger drops them. Without this, moving from an
+  // account's range to the analysis handed that range over as its period. One
+  // ledger to another keeps it: the range means the same thing on both.
+  const crossing = params.view === "analysis" || state.account === "analysis";
+  if ("view" in params && crossing && !("from" in params) && !("to" in params) && !("period" in params)) {
+    url.delete("from");
+    url.delete("to");
+  }
   for (const [key, value] of Object.entries(params)) {
     if (value === "") { url.delete(key); continue; }
-    if (key === "period") { url.delete("from"); url.delete("to"); }
-    if (key === "from" || key === "to") url.delete("period");
+    if (key === "period" || key === "year") { url.delete("from"); url.delete("to"); }
+    if (key === "from" || key === "to") { url.delete("period"); url.delete("year"); }
     if (key === "q") url.delete("qt");
     url.set(key, value);
   }
