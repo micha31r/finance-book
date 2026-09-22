@@ -1,6 +1,6 @@
 # Finance Book
 
-A personal ledger built from real bank statements. Two parts:
+A personal ledger built from real bank statements. Three parts:
 
 ```
 backend/    parses statements, validates them, stores them in SQLite
@@ -9,6 +9,8 @@ serve.py    exports fresh data and serves the page
 ```
 
 ## Setup
+
+Needs Python 3.11 or newer.
 
 ```sh
 python3 -m venv .venv
@@ -22,10 +24,14 @@ cd backend
 ../.venv/bin/python ingest.py            # prompts, drag files from Finder
 ../.venv/bin/python ingest.py FILE...
 ../.venv/bin/python review.py            # confirm cross-bank transfers
+../.venv/bin/python rules.py seed        # the starting categories, run once
 ```
 
 Re-running is safe. Nothing is written unless the file passes its checks.
 See `backend/README.md` for what is supported and what is checked.
+
+The starting rules in `backend/category_seed.py` name the shops in the
+author's own statements. Edit them for yours, or add rules on the Rules view.
 
 ## Look at it
 
@@ -36,27 +42,29 @@ See `backend/README.md` for what is supported and what is checked.
 Exports the database to `frontend/data.json`, then serves the page. Run it
 again after loading new statements.
 
-The bar at the top of the page asks an AI agent about your money. It uses the
-`claude` CLI's sign-in, so run `claude` once first. It reads the database
-without account numbers, and changes nothing until you click Apply.
+The views are All accounts, one ledger per account, Spending analysis, Term
+deposits, Investments and Rules. The URL holds the view, so a link or a
+bookmark opens the same place.
 
-Double-click a cell in any transaction table to edit its description, type or
-category. Each ledger table ends with a "+ add" row for money the bank has not
-listed yet: a real payment, or a what-if, a plan you want to see the effect of.
-What-ifs are tagged and can be hidden from the sidebar footer. Rows you add can
-be edited and deleted.
+The bar at the top of the page asks an AI agent about your money. It needs the
+`claude` CLI installed and signed in, so run `claude` once in a terminal
+first. It reads the database without account numbers, and changes nothing
+until you click Apply.
+
+You can double-click a cell in any transaction table to edit its description,
+type or category. Each ledger table ends with a "+ add" row for money the bank
+has not listed yet. That is a real payment, or a what-if: a plan you want to
+see the effect of. What-ifs are tagged, and a toggle in the sidebar footer
+hides them. Rows you add can be edited and deleted.
 
 The bank's rows keep their dates and amounts. A real row you add is replaced
 when the bank's next balance covers its day. A CSV export with no balance adds
 the bank's row beside yours instead, so delete yours then.
 
-Rule hit counts are not in `data.json`. The Rules tab fetches them from
-`/api/rules`, which keeps the export fast.
-
 ## Documentation
 
-- `backend/README.md` — supported banks, validation, idempotency
-- `backend/SCHEMA.md` — the database, and the rules for reading it correctly
+- `backend/README.md`: supported banks, validation, idempotency
+- `backend/SCHEMA.md`: the database, and the rules for reading it correctly
 
 ## Privacy
 

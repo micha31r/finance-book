@@ -7,7 +7,10 @@ def rows(path, has_header=False):
     """Read a CSV, dropping blank lines. Returns dicts if has_header, else lists."""
     with open(path, newline="", encoding="utf-8-sig") as fh:
         if has_header:
-            return [r for r in csv.DictReader(fh) if any(v and v.strip() for v in r.values())]
+            # A row with surplus cells keeps them in a list, and a short row
+            # fills in None. Neither is text worth keeping a row for.
+            return [r for r in csv.DictReader(fh)
+                    if any(isinstance(v, str) and v.strip() for v in r.values())]
         return [r for r in csv.reader(fh) if any(v.strip() for v in r)]
 
 

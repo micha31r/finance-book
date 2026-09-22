@@ -18,7 +18,7 @@ import functools
 import re
 import re._parser as sre_parse
 import sqlite3
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import date, datetime, timezone
 from pathlib import Path
 from re._constants import BRANCH, MAX_REPEAT, MIN_REPEAT
@@ -126,7 +126,11 @@ CREATE TABLE IF NOT EXISTS holding (
     note        TEXT
 );
 CREATE INDEX IF NOT EXISTS txn_account_date ON txn(account_id, date);
-CREATE INDEX IF NOT EXISTS txn_reference ON txn(reference);
+DROP INDEX IF EXISTS txn_reference;    -- no query reads it; older files carry it
+-- A leg belongs to one confirmed pair. Pairing inserts with OR IGNORE, so a
+-- second pair for a leg is dropped rather than counted twice.
+CREATE UNIQUE INDEX IF NOT EXISTS transfer_from ON transfer(from_txn_id) WHERE confirmed = 1;
+CREATE UNIQUE INDEX IF NOT EXISTS transfer_to ON transfer(to_txn_id) WHERE confirmed = 1;
 """
 
 
@@ -221,6 +225,88 @@ def regexp(pattern, text):
     return compiled is not None and compiled.search(text or "") is not None
 
 
+# ---- one-off changes to stored data, run by connect() in this order ----
+
+
+def _strip_effective_dates(conn):
+    """Take ANZ Plus's "Effective Date dd/mm/yyyy" out of every match_key.
+
+    Only a statement prints it. So a statement's card purchases never matched
+    the Transaction List's copies of them: the list's rows were deleted and
+    inserted again instead of being upgraded in place, and any type or
+    category set on them was lost. Rows that now share a key are numbered
+    again in document order, so the unique key still holds.
+    """
+    groups = defaultdict(list)
+    for row in conn.execute("SELECT id, account_id, date, amount, match_key, occurrence"
+                            " FROM txn ORDER BY date, sequence, id"):
+        # From the stored key, not the description: a row renamed on the page
+        # keeps the bank's key.
+        key = match_key(row["match_key"])
+        groups[(row["account_id"], row["date"], row["amount"], key)].append(row)
+    for (_, _, _, key), rows in groups.items():
+        if all(row["match_key"] == key for row in rows):
+            continue
+        bank = [row for row in rows if row["occurrence"] > 0]
+        hand = [row for row in rows if row["occurrence"] < 0]
+        # Each row first takes a number beyond any the group holds, so that
+        # no step lands on a key another row of it still has. Hand rows can
+        # skip numbers, when one of three what-ifs was deleted, so the bound
+        # is the largest number, not the count.
+        beyond = max(abs(row["occurrence"]) for row in rows)
+        for side, sign in ((bank, 1), (hand, -1)):
+            for offset in (beyond, 0):
+                conn.executemany(
+                    "UPDATE txn SET match_key = ?, occurrence = ? WHERE id = ?",
+                    [(key, sign * (offset + n), row["id"]) for n, row in enumerate(side, 1)])
+
+
+def _list_ends(conn):
+    """Set each Transaction List's period_end to its last row's date.
+
+    It was the day the list was generated, which the parser no longer reads,
+    so the same list downloaded again a day later became a second document.
+    The end is part of the document's key, so two lists of one month can now
+    share one. The newer, or the one with rows, keeps every row and the other
+    goes.
+    """
+    lists = conn.execute(
+        "SELECT d.id, d.account_id, d.period_start, MAX(t.date) AS last FROM document d"
+        " JOIN txn t ON t.document_id = d.id WHERE d.kind = 'list' GROUP BY d.id ORDER BY d.id"
+    ).fetchall()
+    # Every key is freed first: a list's new end can be another's old one.
+    conn.executemany("UPDATE document SET period_end = NULL WHERE id = ?",
+                     [(doc["id"],) for doc in lists])
+    for doc in lists:
+        rival = conn.execute(
+            "SELECT id FROM document WHERE account_id = ? AND kind = 'list'"
+            " AND period_start = ? AND period_end = ?",
+            (doc["account_id"], doc["period_start"], doc["last"])).fetchone()
+        if rival:
+            conn.execute("UPDATE txn SET document_id = ? WHERE document_id = ?",
+                         (doc["id"], rival["id"]))
+            conn.execute("DELETE FROM document WHERE id = ?", (rival["id"],))
+        conn.execute("UPDATE document SET period_end = ? WHERE id = ?", (doc["last"], doc["id"]))
+
+
+def _anz_inclusive_starts(conn):
+    """Move each ANZ classic statement's start, after the first, on by a day.
+
+    ANZ prints the previous statement's closing day as the next one's start,
+    so the two overlapped by a day in the database, and verify_stored had to
+    hand a row on that day to the earlier one. The parser now stores the day
+    the period really begins, and the checks compare dates plainly.
+    """
+    conn.execute(
+        "UPDATE document SET period_start = date(period_start, '+1 day')"
+        " WHERE kind = 'statement' AND statement_no > 1 AND account_id IN"
+        " (SELECT account.id FROM account JOIN bank ON bank.id = account.bank_id"
+        "  WHERE bank.name = 'ANZ')")
+
+
+MIGRATIONS = [_strip_effective_dates, _list_ends, _anz_inclusive_starts]
+
+
 def connect(path=DEFAULT_PATH):
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
@@ -235,6 +321,15 @@ def connect(path=DEFAULT_PATH):
     for name, definition in (("whatif", "INTEGER NOT NULL DEFAULT 0"), ("series", "INTEGER")):
         if name not in present:
             conn.execute(f"ALTER TABLE txn ADD COLUMN {name} {definition}")
+    # A change to stored data that must happen once runs here, in order, and
+    # user_version records how many have. Nothing else runs them, so no file
+    # is changed twice and none is left behind.
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    for migrate in MIGRATIONS[version:]:
+        migrate(conn)
+    if version < len(MIGRATIONS):
+        conn.execute(f"PRAGMA user_version = {len(MIGRATIONS)}")
+        conn.commit()
     return conn
 
 
@@ -300,8 +395,8 @@ def write_transactions(conn, acct_id, doc_id, doc, verified):
 
     A statement is complete and balance-checked for its period, so it replaces
     every provisional row dated inside it, whichever file arrives first. The
-    keys alone would miss some: an ANZ Plus statement ends a card purchase with
-    "Effective Date dd/mm/yyyy" and a Transaction List never does.
+    keys alone would miss some: a statement can word a row differently from
+    the Transaction List, and a row the list showed may never post.
 
     Returns (inserted, upgraded, unchanged, removed).
     """
@@ -335,7 +430,7 @@ def write_transactions(conn, acct_id, doc_id, doc, verified):
                         "income" if txn.amount > 0 else "expense", position)).lastrowid
             seen_ids.append(new_id)
             inserted += 1
-        elif doc.rank > RANK[row["kind"]]:
+        elif RANK[doc.kind] > RANK[row["kind"]]:
             # A statement supersedes what a provisional listing said. COALESCE
             # keeps what the older source knew: a CSV export outranks a report
             # but carries no balance, and must not erase one.

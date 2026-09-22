@@ -31,7 +31,7 @@ RANK = {"statement": 3, "export": 2, "report": 1, "list": 1, "manual": 0}
 class Document:
     """One parsed file, or one account's slice of a multi-account file."""
     bank: str
-    kind: str                       # statement | export | report | list
+    kind: str           # statement | export | report | list | accounts; the database adds manual
     number: str                     # account number, digits only
     transactions: list[Transaction]
     source_name: str
@@ -58,7 +58,3 @@ class Document:
     @property
     def provisional(self) -> bool:
         return self.kind in ("report", "list")
-
-    @property
-    def rank(self) -> int:
-        return RANK[self.kind]

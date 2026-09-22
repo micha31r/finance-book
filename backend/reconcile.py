@@ -59,35 +59,24 @@ def check_document(doc):
 def check_daily_balances(doc, daily):
     """Compare a document against an independent daily balance series.
 
-    This is the only check that can prove a transaction is missing. If the
-    balance moved on a day with no transaction, something was dropped.
+    This is the only check that can prove a transaction is missing. The
+    series holds business days only, so the move between two of its days is
+    compared with the rows dated after the first day up to the second: a
+    Saturday's payment is explained by Monday's balance. Returns (problems,
+    days of the series the document was checked against).
     """
     if not daily or not doc.transactions:
         return [], 0
-    problems = []
-    end_of_day = {}
-    for txn in doc.transactions:
-        if txn.balance is not None:
-            end_of_day[txn.date] = txn.balance
     first, last = doc.transactions[0].date, doc.transactions[-1].date
-
-    matched = 0
-    for day, balance in sorted(daily.items()):
-        if not first <= day <= last:
-            continue
-        if day in end_of_day:
-            matched += 1
-            if end_of_day[day] != balance and len(problems) < MAX_REPORTED:
-                problems.append(f"daily balance {day}: export {money_str(end_of_day[day])}, "
-                                f"accounts file {money_str(balance)}")
-
-    days = sorted(d for d in daily if first <= d <= last)
+    days = sorted(day for day in daily if first <= day <= last)
+    problems = []
     for previous, day in zip(days, days[1:]):
-        if daily[day] != daily[previous] and day not in end_of_day and len(problems) < MAX_REPORTED:
-            problems.append(f"balance moved on {day} "
-                            f"({money_str(daily[previous])} -> {money_str(daily[day])}) "
-                            f"but no transaction covers it")
-    return problems, matched
+        moved = sum(t.amount for t in doc.transactions if previous < t.date <= day)
+        stated = daily[day] - daily[previous]
+        if moved != stated and len(problems) < MAX_REPORTED:
+            problems.append(f"balance {previous} to {day}: accounts file moves "
+                            f"{money_str(stated)}, export rows move {money_str(moved)}")
+    return problems, len(days) if len(days) > 1 else 0
 
 
 def missing_statements(conn, acct_id):
@@ -152,16 +141,10 @@ def contiguity(conn, acct_id):
 
 
 def _adjacent(end, start):
-    """True when two statement periods touch.
-
-    Banks express a handover either way: ANZ classic repeats the boundary date
-    (27 Feb to 27 Apr, then 27 Apr to 27 Jun) while ANZ Plus starts the next
-    day (1 to 31 March, then 1 April). Both mean no data is missing.
-    """
+    """True when the next statement starts no later than the day after this one ends."""
     return date.fromisoformat(start) <= date.fromisoformat(end) + timedelta(days=1)
 
 
-PLACEHOLDER_REFERENCE = re.compile(r"^(\d)\1*$")   # 0000000 and friends
 TRANSFER_WINDOW_DAYS = 7
 # The row's counterparty is an account we hold. Same bank only: account numbers
 # are not unique across banks, so a Westpac number could otherwise match the
@@ -171,13 +154,31 @@ HELD_COUNTERPARTY = (
     " WHERE mine.number = txn.counterparty AND mine.bank_id = holder.bank_id)")
 
 
+def pair_transfers(conn):
+    """Link the two legs of every transfer between your accounts.
+
+    Amount pairs are deleted and found again on every run, so they never
+    depend on which accounts were loaded first. A pair made from a partly
+    loaded database can be wrong: the credit that fits a debit best among
+    the accounts loaded so far need not be the one that fits best once the
+    rest are in. Reference pairs rest on the bank's own numbers and
+    cross-bank pairs on your decision, so both stay.
+    Returns (by_reference, by_amount, ambiguous).
+    """
+    conn.execute("DELETE FROM transfer WHERE method = 'amount'")
+    by_reference = match_by_reference(conn)
+    by_amount, ambiguous = match_by_amount(conn)
+    return by_reference, by_amount, ambiguous
+
+
 def match_by_reference(conn):
     """Pair internal transfers that share a trace reference.
 
     Both ANZ banks print the same reference on both legs. A bare number is weak
-    evidence on its own, so a pair must also sit in one bank, within a week, and
-    carry opposite amounts. Without those guards an invoice number and a refund
-    number that happen to match would be netted out of your spending silently.
+    evidence on its own, so a pair must also name the other account, sit in
+    one bank, within a week, and carry opposite amounts. Without those guards
+    an invoice number and a refund number that happen to match would be netted
+    out of your spending silently.
 
     ANZ Plus sometimes reuses a reference a year or more later, so one number
     can cover several transfers. A debit pairs with the one credit that fits it,
@@ -186,11 +187,9 @@ def match_by_reference(conn):
     rows = conn.execute(
         "SELECT t.id, t.account_id, t.date, t.amount, t.reference, a.bank_id"
         " FROM txn t JOIN account a ON a.id = t.account_id"
-        " WHERE t.reference IS NOT NULL").fetchall()
+        " WHERE t.reference IS NOT NULL AND t.counterparty IS NOT NULL").fetchall()
     groups = defaultdict(list)
     for row in rows:
-        if PLACEHOLDER_REFERENCE.match(row["reference"]):
-            continue
         groups[(row["bank_id"], row["reference"])].append(row)
 
     def fits(source, target):
@@ -208,6 +207,13 @@ def match_by_reference(conn):
                 "INSERT OR IGNORE INTO transfer(from_txn_id, to_txn_id, method, confirmed)"
                 " VALUES (?,?,'reference',1)", (source["id"], targets[0]["id"])).rowcount
     return matched
+
+
+def rejected_pairs(conn):
+    """Pairs you turned down in review.py. Only that combination is ruled out,
+    so each leg can still pair with its real partner."""
+    return {(row["from_txn_id"], row["to_txn_id"]) for row in conn.execute(
+        "SELECT from_txn_id, to_txn_id FROM transfer WHERE confirmed = 0")}
 
 
 # A card purchase, ATM withdrawal or interest posting is never one leg of a
@@ -238,10 +244,7 @@ def match_by_amount(conn):
     Returns (linked, ambiguous).
     """
     aliases = owner_aliases(conn)
-    # Pairs you turned down in review.py. Only that combination is ruled out,
-    # so each leg can still pair with its real partner.
-    rejected = {(row["from_txn_id"], row["to_txn_id"]) for row in conn.execute(
-        "SELECT from_txn_id, to_txn_id FROM transfer WHERE confirmed = 0")}
+    rejected = rejected_pairs(conn)
     total = 0
     while True:
         linked, ambiguous = _match_amount_pass(conn, aliases, rejected)
@@ -254,17 +257,19 @@ def _match_amount_pass(conn, aliases, rejected):
     """One sweep. Linking a pair takes both rows out of the pool, which can
     leave a previously ambiguous debit with a single candidate, so the caller
     repeats this until it stops finding anything."""
-    # The pool comes from the data, not from stored types, so loading every
-    # file in one run pairs the same rows as loading them over several. A row
-    # whose type is already settled, by a held counterparty, a typed rule or
-    # your own decision, is not up for pairing. Nor is a what-if: it is a
-    # plan, and no money moved for it.
+    # The pool comes from the data, not from stored types, and pair_transfers
+    # makes every amount pair afresh, so loading every file in one run pairs
+    # the same rows as loading them over several. A row that names another
+    # account is settled by that: it pairs by reference if the account is
+    # held, and has no held partner if not. A row whose type a typed rule or
+    # your own decision has settled is not up for pairing either. Nor is a
+    # what-if: it is a plan, and no money moved for it.
     rows = conn.execute(
         "SELECT id, account_id, date, amount, description FROM txn WHERE whatif = 0"
         "   AND id NOT IN (SELECT from_txn_id FROM transfer WHERE confirmed = 1"
         "                  UNION SELECT to_txn_id FROM transfer WHERE confirmed = 1)"
         "   AND id NOT IN (SELECT txn_id FROM manual_type)"
-        f"  AND NOT {HELD_COUNTERPARTY}"
+        "   AND counterparty IS NULL"
         "   AND NOT EXISTS (SELECT 1 FROM rule WHERE rule.type IS NOT NULL"
         "                   AND txn.description REGEXP rule.pattern)").fetchall()
 
@@ -331,15 +336,15 @@ def evidence(debit, credit, aliases):
 
     2 when both legs use transfer wording, or when the name the debit paid is
     the name the credit came from ("PAYMENT TO A SMITH" and "PAYMENT FROM MR A
-    SMITH"). 1 when only one leg uses transfer wording or names you. 0 when
-    neither does, and no pair is made. A 1 only wins where no 2 competes.
+    SMITH"). 1 when a leg names you. 0 otherwise, and no pair is made: transfer
+    wording on one leg alone is how money sent to anyone reads on the way out.
+    A 1 only wins where no 2 competes.
     """
     payee, payer = _name(debit, PAYEE), _name(credit, PAYER)
     if (TRANSFER_WORDING.search(debit) and TRANSFER_WORDING.search(credit)) \
             or (payee and payer and (payee <= payer or payer <= payee)):
         return 2
-    return int(any(TRANSFER_WORDING.search(text) or names_owner(text, aliases)
-                   for text in (debit, credit)))
+    return int(any(names_owner(text, aliases) for text in (debit, credit)))
 
 
 def _name(description, wording):
@@ -425,8 +430,10 @@ def reclassify(conn, ids=None):
     # rule that sets `type` still labels them: "Term deposit" is what they are.
     conn.execute(f"UPDATE txn SET category = NULL WHERE {only}", args)
     for rule in rules:
-        plain = "" if rule["type"] else " AND type != 'transfer'"
-        conn.execute(f"UPDATE txn SET category = ? WHERE description REGEXP ?{plain} AND {only}",
+        # The type test goes first: it is cheap, and the regex then runs on
+        # fewer rows.
+        plain = "" if rule["type"] else "type != 'transfer' AND "
+        conn.execute(f"UPDATE txn SET category = ? WHERE {plain}description REGEXP ? AND {only}",
                      (rule["category"], rule["pattern"], *args))
     # Your own category goes last too, so no rule can undo it.
     conn.execute(
@@ -460,7 +467,7 @@ def unheld_counterparties(conn):
         " GROUP BY counterparty ORDER BY COUNT(*) DESC").fetchall()
 
 
-def transfer_candidates(conn, aliases, window_days=3):
+def transfer_candidates(conn, aliases):
     """Propose cross-bank self-transfers for confirmation.
 
     No shared key exists between banks, so these are guesses. They are only
@@ -470,9 +477,7 @@ def transfer_candidates(conn, aliases, window_days=3):
     linked = {i for row in conn.execute(
         "SELECT from_txn_id, to_txn_id FROM transfer WHERE confirmed = 1")
               for i in (row["from_txn_id"], row["to_txn_id"])}
-    # A pair you turned down is not offered again. Each leg still can be.
-    rejected = {(row["from_txn_id"], row["to_txn_id"]) for row in conn.execute(
-        "SELECT from_txn_id, to_txn_id FROM transfer WHERE confirmed = 0")}
+    rejected = rejected_pairs(conn)
     rows = [r for r in conn.execute(
         # A what-if is a plan, so it is no leg of a transfer that happened.
         "SELECT t.id, t.account_id, t.date, t.amount, t.description, a.name, a.number"
@@ -493,7 +498,7 @@ def transfer_candidates(conn, aliases, window_days=3):
                 continue
             delta = abs((date.fromisoformat(credit["date"])
                          - date.fromisoformat(debit["date"])).days)
-            if delta <= window_days and (best is None or delta < best[0]):
+            if delta <= SELF_TRANSFER_WINDOW and (best is None or delta < best[0]):
                 best = (delta, debit)
         if best:
             used.add(best[1]["id"])
@@ -513,23 +518,18 @@ def verify_stored(conn, acct_id):
         " FROM document WHERE account_id = ? AND kind = 'statement'"
         "   AND period_start IS NOT NULL AND opening_balance IS NOT NULL"
         "   AND closing_balance IS NOT NULL ORDER BY period_start", (acct_id,)).fetchall()
-    problems, previous_end = [], None
+    problems = []
     for statement in statements:
-        # ANZ classic repeats the boundary date on both statements, so a row
-        # dated exactly there belongs to the earlier one. ANZ Plus starts a day
-        # later and has no such overlap.
-        lower = ">" if previous_end == statement["period_start"] else ">="
         net = conn.execute(
             # A what-if moved no money, so it explains none of the statement's.
-            f"SELECT COALESCE(SUM(amount), 0) net FROM txn"
-            f" WHERE account_id = ? AND date {lower} ? AND date <= ? AND whatif = 0",
+            "SELECT COALESCE(SUM(amount), 0) net FROM txn"
+            " WHERE account_id = ? AND date >= ? AND date <= ? AND whatif = 0",
             (acct_id, statement["period_start"], statement["period_end"])).fetchone()["net"]
         expected = statement["closing_balance"] - statement["opening_balance"]
         if net != expected:
             problems.append(
                 f"{statement['period_start']} to {statement['period_end']}: statement moves "
                 f"{money_str(expected)}, stored rows move {money_str(net)}")
-        previous_end = statement["period_end"]
     return problems
 
 

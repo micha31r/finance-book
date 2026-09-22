@@ -11,6 +11,7 @@ balance disagrees with a printed one. An error stops it before the file is
 replaced, and Python exits 1. Not 2: Python exits 2 when it cannot run the
 script at all. serve.py reads these codes.
 """
+import argparse
 import json
 import os
 import sys
@@ -19,6 +20,7 @@ from pathlib import Path
 
 import db
 from merchants import merchant
+from parsers.shared.money import money_str
 
 OUTPUT = Path(__file__).resolve().parent.parent / "frontend" / "data.json"
 GENERIC_PRODUCTS = {"cash", "account", ""}
@@ -119,7 +121,7 @@ def export(conn):
                 # `date` is the bank's posting date: it orders the statement and
                 # the running balance. `spent_on` is when the money actually
                 # moved. They differ by up to 8 days, and the gap is why the
-                # posting dates land on no weekend at all — a card tap on
+                # posting dates land on no weekend at all: a card tap on
                 # Saturday posts on Monday.
                 "date": txn["date"],
                 "spent_on": txn["effective_date"] or txn["date"],
@@ -159,44 +161,27 @@ def export(conn):
         "SELECT id, kind, name, institution, balance, as_at, note"
         " FROM holding ORDER BY kind, name")]
 
-    # Money sent to an account we hold no statements for, less what came back.
-    # If the only such accounts are your term deposits, this is what should be
-    # sitting in them right now, and it is a direct check on what you enter.
-    parked = conn.execute(
-        # A pair only cancels out while both legs are transfers. If you typed one
-        # leg as spending, the other is money that went somewhere unheld. A
-        # what-if is a plan: nothing was sent.
-        "SELECT COALESCE(SUM(amount), 0) n FROM txn WHERE type = 'transfer' AND whatif = 0"
-        " AND id NOT IN"
-        " (SELECT p.from_txn_id FROM transfer p JOIN txn leg ON leg.id = p.to_txn_id"
-        "   WHERE p.confirmed = 1 AND leg.type = 'transfer'"
-        "  UNION SELECT p.to_txn_id FROM transfer p JOIN txn leg ON leg.id = p.from_txn_id"
-        "   WHERE p.confirmed = 1 AND leg.type = 'transfer')").fetchone()["n"]
-
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "accounts": accounts,
         "holdings": holdings,
         "rules": rules,
-        "parked": -parked,
         "transactions": transactions,
     }
 
 
 def main():
+    # Only for --help, and to refuse arguments it does not take.
+    argparse.ArgumentParser(description=__doc__,
+                            formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     conn = db.connect()
     data = export(conn)
 
     # The derived balance must agree with every balance a bank actually printed.
-    stated = {}
-    for row in conn.execute("SELECT account_id, date, amount, balance FROM txn"
-                            " WHERE balance IS NOT NULL"):
-        stated.setdefault((row["account_id"], row["date"], row["amount"]), set()).add(row["balance"])
+    stated = {r["id"]: r["balance"] for r in conn.execute(
+        "SELECT id, balance FROM txn WHERE balance IS NOT NULL")}
     mismatches = [t for t in data["transactions"]
-                  # A what-if's balance is a projection, not one the bank printed.
-                  if not t["whatif"]
-                  and (t["account"], t["date"], t["amount"]) in stated
-                  and t["balance"] not in stated[(t["account"], t["date"], t["amount"])]]
+                  if t["id"] in stated and t["balance"] != stated[t["id"]]]
     conn.close()
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
@@ -210,11 +195,11 @@ def main():
           f"{len(data['accounts'])} accounts, {size:.1f} MB")
     net_worth = (sum(a["balance"] or 0 for a in data["accounts"])
                  + sum(h["balance"] for h in data["holdings"]))
-    print(f"net worth: {net_worth / 100:,.2f}")
+    print(f"net worth: {money_str(net_worth)}")
     if mismatches:
         print(f"WARNING: {len(mismatches)} derived balances disagree with the printed ones")
         for t in mismatches[:5]:
-            print(f"  {t['date']} {t['amount'] / 100:,.2f}  {t['description'][:52]}")
+            print(f"  {t['date']} {money_str(t['amount'])}  {t['description'][:52]}")
         return 3
     return 0
 

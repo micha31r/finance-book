@@ -23,9 +23,7 @@ def detect(path) -> bool:
     if not str(path).lower().endswith(".csv"):
         return False
     head = csvfile.first_line(path)
-    if head.startswith(EXPORT_HEADER) or ACCOUNTS_HEADER in head or head.startswith(PAYMENTS_HEADER):
-        return True
-    return False
+    return head.startswith(EXPORT_HEADER) or ACCOUNTS_HEADER in head or head.startswith(PAYMENTS_HEADER)
 
 
 def parse(path) -> list[Document]:

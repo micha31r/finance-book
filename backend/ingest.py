@@ -8,6 +8,7 @@ name, because the ANZ PDFs arrive named like
     python ingest.py                 # prompts for paths
     python ingest.py FILE [FILE...]
 """
+import argparse
 import shlex
 import sys
 from collections import Counter
@@ -16,7 +17,7 @@ from pathlib import Path
 import db
 import reconcile
 from parsers import anz, anzplus, westpac
-from parsers.shared.money import money_str
+from parsers.shared.money import match_key, money_str
 
 PARSERS = [anzplus, anz, westpac]
 
@@ -29,19 +30,20 @@ DOMINANCE = 5
 
 
 def identify(path):
-    """Return the parser that recognises this file, or None."""
+    """The parser that recognises this file, or None with the last error hit."""
+    error = None
     for parser in PARSERS:
         try:
             if parser.detect(path):
-                return parser
-        except Exception:
-            continue        # unreadable or corrupt for this parser, try the next
-    return None
+                return parser, None
+        except Exception as caught:
+            # Unreadable or corrupt for this parser: try the next, and keep
+            # the reason in case none takes it.
+            error = str(caught) or type(caught).__name__
+    return None, error
 
 
-def read_paths(argv):
-    if argv:
-        return [Path(a) for a in argv]
+def read_paths():
     print("Paste file paths (drag from Finder), then press Enter:")
     try:
         line = input("> ")
@@ -66,8 +68,9 @@ def resolve_account(conn, doc):
     for account in candidates:
         hits = sum(1 for txn in doc.transactions if conn.execute(
             # A what-if is no evidence that an export's row is already known.
-            "SELECT 1 FROM txn WHERE account_id = ? AND date = ? AND amount = ? AND whatif = 0"
-            " LIMIT 1", (account["id"], txn.date.isoformat(), txn.amount)).fetchone())
+            "SELECT 1 FROM txn WHERE account_id = ? AND date = ? AND amount = ? AND match_key = ?"
+            " AND whatif = 0 LIMIT 1",
+            (account["id"], txn.date.isoformat(), txn.amount, match_key(txn.description))).fetchone())
         scores.append((hits, account))
     scores.sort(key=lambda s: -s[0])
     best = scores[0][0] if scores else 0
@@ -108,25 +111,34 @@ def resolve_account(conn, doc):
 
 
 def main(argv):
-    paths = read_paths(argv)
+    cli = argparse.ArgumentParser(description=__doc__,
+                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    cli.add_argument("files", nargs="*", type=Path,
+                     help="statements and exports; prompts for them when none are given")
+    paths = cli.parse_args(argv).files or read_paths()
     if not paths:
         print("nothing to do")
         return 0
 
+    status = 0          # 1 once any file could not be loaded
     documents = []
     print("\n  detected")
     for file_no, path in enumerate(paths):
         if not path.exists():
             print(f"    {path.name[:40]:42s} missing file")
+            status = 1
             continue
-        parser = identify(path)
+        parser, error = identify(path)
         if parser is None:
-            print(f"    {path.name[:40]:42s} not recognised")
+            why = f" ({error})" if error else ""
+            print(f"    {path.name[:40]:42s} not recognised{why}")
+            status = 1
             continue
         try:
             parsed = parser.parse(path)
         except Exception as error:
             print(f"    {path.name[:40]:42s} FAILED to parse: {error}")
+            status = 1
             continue
         if not parsed:
             print(f"    {path.name[:40]:42s} nothing to load (already covered elsewhere)")
@@ -155,7 +167,7 @@ def main(argv):
         # so this runs before an ANZ CSV export is asked which account it is.
         problems, verified = reconcile.check_document(doc)
         extra, matched_days = reconcile.check_daily_balances(doc, daily.get((doc.bank, doc.number)))
-        checked.append((file_no, doc, problems + extra, verified or matched_days > 0, matched_days))
+        checked.append((file_no, doc, problems + extra, verified, matched_days))
 
     # A Westpac export holds several accounts. All of them are checked before
     # any is written, so a file that fails anywhere leaves nothing behind. Files
@@ -163,6 +175,7 @@ def main(argv):
     failed = {file_no for file_no, _, problems, _, _ in checked if problems}
     for file_no, doc, problems, verified, matched_days in checked:
         if not resolve_account(conn, doc):
+            status = 1
             continue
         label = (f"  {doc.bank} {doc.number} {doc.kind}"
                  f"{f' #{doc.statement_no}' if doc.statement_no else ''} "
@@ -171,6 +184,7 @@ def main(argv):
             print(f"{label}\n    REJECTED, {len(doc.transactions)} transactions not written")
             for problem in problems or ["another account in this file failed its checks"]:
                 print(f"      {problem}")
+            status = 1
             continue
 
         acct_id = db.account_id(conn, doc)
@@ -179,22 +193,21 @@ def main(argv):
         totals.update(dict(zip(('new', 'upgraded', 'known', 'removed'), counts)))
         checks = ["balance verified" if verified else "no balance to verify"]
         if matched_days:
-            checks.append(f"{matched_days} daily balances matched")
+            checks.append(f"checked against {matched_days} days of balances")
         print(f"{label}\n    {len(doc.transactions):4d} transactions   "
               f"{counts[0]} new, {counts[2]} already present"
               f"{f', {counts[1]} upgraded' if counts[1] else ''}"
               f"{f', {counts[3]} removed' if counts[3] else ''}   {', '.join(checks)}")
     conn.commit()
 
-    matched = reconcile.match_by_reference(conn)
-    by_amount, ambiguous = reconcile.match_by_amount(conn)
+    by_reference, by_amount, ambiguous = reconcile.pair_transfers(conn)
     reconcile.reclassify(conn)
     conn.commit()
 
     print(f"\n  written    {totals['new']} new, {totals['known']} already present, "
           f"{totals['upgraded']} upgraded, {totals['removed']} removed")
-    print(f"  transfers  {matched} newly paired by shared reference, "
-          f"{by_amount} by matching amount across your accounts")
+    print(f"  transfers  {by_reference} newly paired by shared reference, "
+          f"{by_amount} paired by matching amount across your accounts")
     if ambiguous:
         print(f"             {ambiguous} amounts had more than one possible partner, left for review")
 
@@ -226,10 +239,9 @@ def main(argv):
 
     pending = reconcile.transfer_candidates(conn, reconcile.owner_aliases(conn))
     if pending:
-        print(f"\n  {len(pending)} cross-bank candidate(s) need review "
-              f"— run `python review.py`")
+        print(f"\n  {len(pending)} cross-bank candidate(s) need review: run `python review.py`")
     conn.close()
-    return 0
+    return status
 
 
 if __name__ == "__main__":

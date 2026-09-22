@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <title>Finance Book</title>
+<!-- No icon. Saying so stops the browser asking for one and logging a 404. -->
+<link rel="icon" href="data:,">
 <style>
   /* Blurple on blue-grey, with zero radius, hairline rules, mono figures and
      uppercase labels.
@@ -36,9 +38,17 @@
     --accent: #9184d9;      /* blurple: current item, primary action */
     --accent-dim: #423a6a;
     --gap: 14px;           /* one spacing step, horizontal and vertical */
+    --bar: 38px;           /* the chat bar's one-line height; the page sits below it */
+    --control: 22px;       /* the chat bar's Send and Stop buttons */
+    /* The one place in the app that is not the purple palette. It marks the
+       surface where you are talking to a model rather than reading your own
+       books, and it only appears while that surface has your attention. */
+    --spectrum: linear-gradient(90deg, #b5abfc, #7cc7fb, #5eead4,
+                                #fbbf24, #f472b6, #a78bfa, #b5abfc);
     --display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
     --sans: "IBM Plex Sans", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    scrollbar-color: var(--line) transparent;   /* the browser's own is grey */
   }
   * { box-sizing: border-box; }
   /* The browser's own tick box is a neutral grey when unticked, so every tick
@@ -55,7 +65,6 @@
     border: solid; border-width: 0 0 2px 2px; transform: rotate(-45deg);
   }
   /* Other browser defaults that would draw in pure grey, white or blue. */
-  :root { scrollbar-color: var(--line) transparent; }
   ::placeholder { color: var(--ink-faint); }
   ::selection { background: var(--accent-dim); color: var(--ink); }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -66,11 +75,11 @@
     mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5'><rect x='2' y='3' width='12' height='11'/><path d='M2 7h12M5 1v4M11 1v4'/></svg>") center / 14px no-repeat;
   }
   body {
-    margin: 0; background: var(--bg); color: var(--ink);
+    margin: 0; padding-top: var(--bar); background: var(--bg); color: var(--ink);
     font: 14px/1.55 var(--sans);
     -webkit-font-smoothing: antialiased;
   }
-  h1, h2 { font-family: var(--display); font-weight: 700; letter-spacing: -0.035em; }
+  h2 { font-family: var(--display); font-weight: 700; letter-spacing: -0.035em; }
   /* Every figure and timestamp is mono, so columns lock. */
   .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
   .in { color: var(--in); } .out { color: var(--out); } .move { color: var(--move); }
@@ -95,8 +104,6 @@
        window, which is what made the whole page scroll. */
     display: flex; flex-direction: column;
   }
-  @media (max-width: 860px) { nav { position: static; height: auto; border-right: 0;
-                                  border-bottom: 1px solid var(--line); } }
   nav .group { margin-bottom: 14px; flex: none; }
   nav .group > .caption { padding: 0 10px 6px; }
   nav button {
@@ -127,8 +134,7 @@
   .cards .card:first-child { border-left-color: var(--accent); }
   .card .v { font-family: var(--mono); font-size: 20px; font-weight: 400;
              margin-top: 6px; letter-spacing: -0.01em; }
-  .card .note { font-family: var(--mono); }
-  .card .note { font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
+  .card .note { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
   /* The Net cards are the one place a card goes green or red. A surplus or a
      loss is a verdict, and blurple-or-ink only says which sign it has. Zero
      stays desaturated, like a transfer: neither. */
@@ -242,8 +248,8 @@
   }
   td { padding: 4px 10px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
   /* One transaction, one row. Date, Type, Amount and Balance each settle at the
-     width their own content needs — no narrower, so they never truncate — and
-     the description takes every pixel that is left.
+     width their own content needs, no narrower, so they never truncate. The
+     description takes every pixel that is left.
      Auto layout, not fixed. Fixed layout only divides leftover width evenly
      across the columns, so on a wide window Date was as wide as Description.
      The description cell carries `max-width: 0`, so it asks for nothing while
@@ -259,9 +265,9 @@
      spilling into the Amount column. */
   table.rows td.tags .tag { max-width: 7.5rem; overflow: hidden; text-overflow: ellipsis;
                             vertical-align: bottom; }
-  /* A what-if row carries a third tag. Its category gives way, so the Type
-     column stays the width it has on every other row. */
-  tr.whatif td.tags .tag.cat { max-width: 5rem; }
+  /* A what-if or a provisional row carries a third tag. Its category gives
+     way, so the Type column stays the width it has on every other row. */
+  tr.whatif td.tags .tag.cat, tr.provisional td.tags .tag.cat { max-width: 5rem; }
   /* The same on the rules page, capped at its fixed-width category column. */
   #rules td .tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis;
                    vertical-align: bottom; }
@@ -307,8 +313,8 @@
   table.rows td.amt.out, .tcap .meta .out { color: var(--loss); }
   table.rows .tag.in { --tag: var(--gain); }
   table.rows .tag.out { --tag: var(--loss); }
-  /* A provisional row is one the bank has not finalised. Dimming it says so
-     without spending a column on the word. The reason is in the title. */
+  /* A provisional row is one the bank has not finalised. It is dimmed, and a
+     tag says so; the reason is in the tag's title. */
   tr.provisional td.desc, tr.provisional td.date { color: var(--ink-faint); font-style: italic; }
   /* A what-if is a plan you typed in, not a bank row. It wears the accent: the
      tag is filled with it and the description is written in it. */
@@ -355,14 +361,19 @@
     padding: 5px 12px 5px 9px; font-size: 13px; color: var(--ink-dim);
   }
   .picker label:has(input:checked) { border-color: var(--accent); color: var(--ink); }
+  /* A date box is one of these labels with the input inside. The label gives
+     up its padding and the input draws no box of its own, so the outline the
+     other labels have is the only one it shows. */
+  label:has(> input[type=date]) { padding: 0; }
+  label > input[type=date] { border: 0; background: none; font: inherit; color: inherit; padding: 5px 8px; }
   .swatch { width: 9px; height: 9px; border-radius: 0; display: inline-block; flex: none; }
   tbody tr.pick { cursor: pointer; }
-  /* The name is the part you click to drill in, so only it gets the underline —
-     the tick box beside it does something else. */
+  /* The name is the part you click to drill in, so only it gets the underline.
+     The tick box beside it does something else. */
   tbody tr.pick:hover td:nth-child(2) { text-decoration: underline; text-underline-offset: 3px; }
   td.tick, th.tick { width: 2.2rem; padding-right: 0; }
   /* A category left out of the totals. Still listed, still clickable, just not
-     counted — dimmed rather than hidden so you can put it back. */
+     counted. Dimmed rather than hidden, so you can put it back. */
   tr.off td { opacity: .6; }
   tr.off td.tick { opacity: 1; }
 
@@ -402,7 +413,6 @@
   .bar > i { display: block; height: 100%; }
   .hint { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--move);
           border-radius: 0; padding: 12px 16px; margin-bottom: var(--gap); font-size: 13px; }
-  .hint b { font-variant-numeric: tabular-nums; }
   form.holding { display: grid; grid-template-columns: 2fr 1.4fr 1fr 1fr auto; gap: 8px; align-items: end; }
   @media (max-width: 900px) { form.holding { grid-template-columns: 1fr 1fr; } }
   form.holding label { display: block; font-size: 11px; color: var(--ink-faint);
@@ -447,6 +457,16 @@
   nav .whatif-toggle { display: inline; width: auto; padding: 0; font: inherit;
                        color: var(--ink-dim); text-decoration: underline; text-underline-offset: 2px; }
   nav .whatif-toggle:hover { background: none; color: var(--ink); }
+  /* On a phone the column becomes a wrapped row of groups, so a view opens on
+     its own title instead of under a screen of account names. The foot keeps
+     a line to itself. */
+  @media (max-width: 860px) {
+    nav { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line);
+          flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 0 12px; padding: 10px 12px; }
+    nav .group { margin-bottom: 8px; }
+    nav button { width: auto; }
+    nav .foot { flex-basis: 100%; padding-top: 8px; }
+  }
 
   /* ---------- the agent ---------- */
   /* Fixed to the top on every view and every width, so you can always just
@@ -454,14 +474,6 @@
      over the page rather than pushing it, and clicking the page puts them away.
      --bar is that one-line height, and the layout below is offset by it. It
      stacks above the drill-down overlay too, so it works there as well. */
-  :root {
-    --bar: 38px;
-    /* The one place in the app that is not the purple palette. It marks the
-       surface where you are talking to a model rather than reading your own
-       books, and it only appears while that surface has your attention. */
-    --spectrum: linear-gradient(90deg, #b5abfc, #7cc7fb, #5eead4,
-                                #fbbf24, #f472b6, #a78bfa, #b5abfc);
-  }
   #agent {
     position: fixed; inset: 0 0 auto 0; z-index: 60;
     background: var(--bg); border-bottom: 1px solid var(--line);
@@ -472,9 +484,8 @@
     font: 13px/1.55 var(--mono);
   }
   /* Buttons and text fields do not inherit fonts by default, so they have to be
-     told — including Apply and Dismiss on a proposed change. */
+     told, Apply and Dismiss on a proposed change included. */
   #agent button, #agent textarea { font-family: var(--mono); }
-  body { padding-top: var(--bar); }
 
   /* Two layers of the same gradient: a hairline on the edge, and a blurred
      copy below it doing the glowing. Both absolutely positioned, so neither
@@ -524,9 +535,9 @@
   #agent.full { inset: 0; max-height: none; }
   #agent.full #agentLog { flex: 1; min-height: 0; max-height: none; }
 
-  /* Floats over the top right of the conversation, where the spinner used to
-     be, so text runs underneath instead of wrapping round it. Only shown while
-     there is a conversation to make bigger. */
+  /* Floats over the top right of the conversation, so text runs underneath
+     instead of wrapping round it. Only shown while there is a conversation to
+     make bigger. */
   #agentFull {
     position: absolute; top: 8px; right: 12px; z-index: 2; display: none;
     width: 24px; height: 24px; padding: 0; align-items: center; justify-content: center;
@@ -551,9 +562,8 @@
   /* The right-hand controls: a cluster exactly one row tall, riding the bottom
      of the form. The input pads its text into the middle of that same row, so
      whatever is centred here sits level with the last line of text, and stays
-     level as the box grows. There are no per-button margins to keep in step —
-     those had Send 2px from the top of the row and 6px from the bottom. */
-  :root { --control: 22px; }
+     level as the box grows. There are no per-button margins to keep in step.
+     Those had Send 2px from the top of the row and 6px from the bottom. */
   .agent-controls { flex: none; display: flex; align-items: center; gap: 6px;
                     height: var(--bar); }
   /* Scoped to the whole chat and carrying an ID, on purpose. The buttons set
@@ -698,7 +708,7 @@
   </main>
 </div>
 
-<div id="drill" hidden>
+<div id="drill" hidden role="dialog" aria-modal="true" aria-labelledby="drillName">
   <div class="drill-head">
     <h2 id="drillName"></h2>
     <span class="sub" id="drillSub"></span>
@@ -713,11 +723,12 @@
 <script src="vendor/chart.umd.js"></script>
 <script>
 // Money is integer cents everywhere, exactly as the database stores it.
-// Division by 100 happens only when formatting.
+// Division by 100 happens only when formatting. One formatter, made once: a
+// ledger formats two figures for each of thousands of rows.
+const MONEY = new Intl.NumberFormat("en-AU", {minimumFractionDigits: 2, maximumFractionDigits: 2});
 const money = (c, sign) => {
-  const s = (Math.abs(c) / 100).toLocaleString("en-AU", {minimumFractionDigits: 2, maximumFractionDigits: 2});
   const lead = c < 0 ? "-" : (sign && c > 0 ? "+" : "");
-  return lead + "$" + s;
+  return lead + "$" + MONEY.format(Math.abs(c) / 100);
 };
 // Short form for sidebar balances and chart axes. One decimal below $10k so
 // neighbouring gridlines cannot collide: rounding to whole thousands printed
@@ -765,22 +776,18 @@ const dayLabel = day => {
   return `${+d} ${MONTHS[+m - 1]} ${y}`;
 };
 // Dozens of categories have to be told apart at a glance, so hues are spread by
-// the golden angle over the alphabetical list — hashing the name collided badly,
-// putting four categories within six degrees of each other. Saturation stays low
-// and lightness high so they read on the near-black ground without competing
-// with the signal lime, which 1c reserves for money in, the current item and the
-// primary action. Uncategorised is faint: it means "missing", not a kind of thing.
-function categoryColour(name) {
-  if (!name || name === "Uncategorised") return css("--ink-faint");
-  // From every row, hidden what-ifs included, so the toggle cannot shift the hues.
-  const all = [...new Set(DATA.all.map(t => t.category).filter(Boolean))].sort();
-  const i = all.indexOf(name);
+// the golden angle over the alphabetical list, DATA.categories. Hashing the
+// name collided badly. Saturation stays low and lightness high so they read on
+// the near-black ground without competing with the accent, which is kept for
+// money in, the current item and the primary action. Uncategorised is faint:
+// it means "missing", not a kind of thing.
+function colourFor(name) {
+  const i = name && name !== "Uncategorised" ? DATA.categories.indexOf(name) : -1;
   if (i < 0) return css("--ink-faint");
   // Lightness is set by contrast, not taste: the badge label is the dark
   // ground colour, so a fill below ~66% drops under 4.5:1 on some hues.
   return `hsl(${Math.round(i * 137.508) % 360} 38% ${i % 2 ? 66 : 76}%)`;
 }
-const colourFor = categoryColour;
 
 const MONTH_LABEL = m => {
   const [y, mm] = m.split("-");
@@ -899,8 +906,8 @@ function renderSidebar() {
   foot.innerHTML =
     `<div>${DATA.real.length.toLocaleString()} transactions`
     + ` across ${DATA.accounts.length} accounts`
-    + (plans ? ` · ${plural(plans, "what-if")} <button class="whatif-toggle" type="button">${
-        state.whatif ? "hide" : "show"}</button>` : "")
+    + (plans ? ` · ${plural(plans, "what-if")} <button class="whatif-toggle" type="button"
+        aria-label="${state.whatif ? "Hide" : "Show"} what-ifs">${state.whatif ? "hide" : "show"}</button>` : "")
     + `</div>`
     + `<div>Exported ${esc(stamp(DATA.generated_at))}</div>`;
   nav.append(foot);
@@ -917,10 +924,8 @@ function renderSidebar() {
     const before = state.account;
     state.account = ["all", "holdings", "investments", "rules", "analysis"]
       .includes(b.dataset.id) ? b.dataset.id : +b.dataset.id;
-    // Keep a deliberate "All years" (null). renderYears already drops a year
-    // the new account has no rows for, so resetting here only threw away the
-    // one choice the user cannot get back by clicking a year button.
-    if (state.year !== null) state.year = undefined;
+    // The chosen year or range carries over. renderYears drops a year the new
+    // account has no rows for.
     render();
     // A new view opens at its top, not partway down the last one's table.
     if (state.account !== before) window.scrollTo(0, 0);
@@ -933,10 +938,8 @@ function renderSidebar() {
 // ---------- header, cards ----------
 function renderSummary() {
   const view = accountsInView();
-  // The period on show, not all time. The cards used to be all-time while the
-  // charts and tables beside them obeyed the year buttons, so the page opened
-  // with 2026 lit up and cards showing four years of totals, about seven times
-  // too high.
+  // The period on show, not all time: the cards agree with the charts and
+  // tables beside them, which obey the year buttons.
   const rows = viewRows(state.account);
   const sum = totals(rows);
   const period = periodLabel();
@@ -954,9 +957,9 @@ function renderSummary() {
        <div class="v num ${cls || ""}">${value}</div>
        ${note ? `<div class="note">${note}</div>` : ""}</div>`;
 
-  // Net worth used to live in the top bar. On All accounts it belongs here,
-  // where it can say what it is made of; a single account still shows its own
-  // balance instead.
+  // On All accounts the first card is net worth, where it can say what it is
+  // made of. A single account shows its own balance instead, or a dash when
+  // no statement has stated one, as the sidebar does.
   const byKind = Object.entries(KINDS)
     .map(([kind, meta]) => [meta.title.toLowerCase(), totalOf(kind)])
     .filter(([, total]) => total);
@@ -968,8 +971,8 @@ function renderSummary() {
         ? [`${money(balance)} in accounts`,
            ...byKind.map(([label, total]) => `${money(total)} in ${label}`)].join(" · ")
         : "across every account") + (oldest ? ` · oldest balance as at ${esc(oldest)}` : ""))
-    : card("Balance", money(balance), "",
-           view[0] && view[0].as_at ? "as at " + esc(view[0].as_at) : "");
+    : card("Balance", view[0].balance === null ? "—" : money(view[0].balance), "",
+           view[0].as_at ? "as at " + esc(view[0].as_at) : "");
 
   document.getElementById("cards").innerHTML =
     first +
@@ -991,9 +994,9 @@ const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).
 // own `scales`, and so replaces baseOptions' scales whole, still matches.
 Chart.defaults.font.family = css("--mono");
 Chart.defaults.scale.ticks.font = {size: 11};
-// Legends list category names, which the page sets in sans. Mono is wider: the
-// nine-item legend on All accounts 2023 wrapped to a fourth row, and the shorter
-// plot dropped every other axis label, $0 among them.
+// Legends list category names, which the page sets in sans. Mono is wider: a
+// long legend wrapped to an extra row, and the shorter plot dropped every
+// other axis label, $0 among them.
 Chart.defaults.plugins.legend.labels.font = {family: css("--sans")};
 Chart.defaults.color = css("--ink-faint");      // tick and legend text
 Chart.defaults.borderColor = css("--line");     // gridlines and axis borders
@@ -1001,6 +1004,9 @@ Object.assign(Chart.defaults.plugins.tooltip, {
   backgroundColor: css("--panel"), borderColor: css("--line"), borderWidth: 1,
   titleColor: css("--ink-dim"), bodyColor: css("--ink"), multiKeyBackground: css("--panel"),
 });
+// Chart.js animates every redraw. Whoever asked the system for less motion
+// gets none.
+if (matchMedia("(prefers-reduced-motion: reduce)").matches) Chart.defaults.animation = false;
 
 // Money axes step by a dollar at least. A flat line at zero, such as a closed
 // account's balance, otherwise got eleven gridlines all reading "$0". Returning
@@ -1026,8 +1032,8 @@ function baseOptions(extra = {}) {
   // Chart.js matches the pointer along one axis, and that axis defaults to "x".
   // On a horizontal bar chart the categories run down the y axis, so the
   // default picked whichever bar the pointer's *horizontal* position lined up
-  // with — the tooltip and the click both landed on the wrong category. Derive
-  // it from indexAxis so this cannot be got wrong again.
+  // with, so the tooltip and the click both landed on the wrong category.
+  // Derive it from indexAxis so this cannot be got wrong again.
   options.interaction = extra.interaction ||
     {mode: "index", intersect: false, axis: options.indexAxis === "y" ? "y" : "x"};
   return options;
@@ -1065,7 +1071,7 @@ function renderCharts() {
 
   // Balance at each month end. For a single account that is its own running
   // balance; for "all accounts" it is the sum of every account's last known
-  // balance in that month, which is net worth over time.
+  // balance in that month.
   const view = accountsInView();
   const series = months.map(m => {
     let total = 0;
@@ -1085,7 +1091,7 @@ function renderCharts() {
   document.getElementById("balNote").textContent =
     state.account === "all"
       ? "Every account's balance at each month end, added up. Term deposits and "
-        + "investments are not included — they have no history to plot."
+        + "investments are not included: they have no history to plot."
       : "Balance at the end of each month.";
   draw("balChart", {
     type: "line",
@@ -1122,10 +1128,8 @@ function renderYears() {
     `<button data-y="${y}" aria-current="${state.year === y}">${y}</button>`).join("")
     // All years means no filter at all, so a range showing takes the light off it.
     + `<button data-y="" aria-current="${state.year === null && !state.from && !state.to}">All years</button>`
-    + `<label style="padding:0"><input type="date" class="range-from" aria-label="From" value="${state.from || ""}"
-        style="border:0;background:none;font:inherit;color:inherit;padding:5px 8px"></label>`
-    + `<label style="padding:0"><input type="date" class="range-to" aria-label="To" value="${state.to || ""}"
-        style="border:0;background:none;font:inherit;color:inherit;padding:5px 8px"></label>`;
+    + `<label><input type="date" class="range-from" aria-label="From" value="${state.from || ""}"></label>`
+    + `<label><input type="date" class="range-to" aria-label="To" value="${state.to || ""}"></label>`;
   box.querySelectorAll("button").forEach(b => b.onclick = () => {
     // A year replaces the range, and All years clears both.
     state.year = b.dataset.y || null;
@@ -1153,7 +1157,7 @@ const SEARCH_ICON = `<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden
   <circle cx="7" cy="7" r="4.4" fill="none" stroke="currentColor" stroke-width="1.6"/>
   <path d="M10.6 10.6 14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
 </svg>`;
-// Points right when the table is folded, and turns down when it is open.
+// Points right when the table is collapsed, and turns down when it is open.
 const CHEVRON = `<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
   <path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.6"
         stroke-linecap="round" stroke-linejoin="round"/>
@@ -1190,8 +1194,9 @@ function searchRows(rows, query) {
 const tables = new Map();       // key -> {rows, opts}
 
 // Which account tables on All accounts are open, by account id. They start
-// collapsed, since nine full ledgers is a long scroll to find one, and the ones
-// you open stay open across a refresh. Saved in this browser only.
+// collapsed, since a full ledger for every account is a long scroll to find
+// one, and the ones you open stay open across a refresh. Saved in this browser
+// only.
 const OPEN_KEY = "finance-book.open";
 let openTables;
 try { openTables = new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || "[]")); }
@@ -1202,11 +1207,18 @@ function setOpen(wrap, open) {
   wrap.querySelector("table").hidden = !open;
   // A search cannot run in a table you cannot see.
   if (!open && !wrap.querySelector(".find").hidden) closeFind(wrap);
+  // A table drawn collapsed has no rows yet. Its first opening builds them.
+  const tbody = wrap.querySelector("tbody");
+  if (open && !tbody.children.length) {
+    const {rows, opts} = tables.get(wrap.dataset.table);
+    tbody.innerHTML = tableBody(rows, opts);
+  }
   openTables[open ? "add" : "delete"](wrap.dataset.table);
   try { localStorage.setItem(OPEN_KEY, JSON.stringify([...openTables])); } catch {}
 }
 
-// Searching a folded table opens it first. A table with no fold is left alone.
+// Searching a collapsed table opens it first. A table that cannot collapse is
+// left alone.
 const unfold = wrap => { if (wrap.querySelector(".fold")) setOpen(wrap, true); };
 
 function tableBody(rows, {column, hideCategory}) {
@@ -1215,10 +1227,10 @@ function tableBody(rows, {column, hideCategory}) {
   // the bank's posting date, which orders the statement and its balance.
   const day = column === "account" ? spentOn : t => t.date;
   // Newest first. Reversing alone was not enough: data.json is grouped by
-  // account and only sorted by date within a group, so a set spanning accounts
-  // — every category drill-down — came out in backwards account blocks. Reverse
-  // first, then a stable sort by date, so within one day the later transaction
-  // still comes first.
+  // account and only sorted by date within a group, so a set spanning accounts,
+  // as every category drill-down does, came out in backwards account blocks.
+  // Reverse first, then a stable sort by date, so within one day the later
+  // transaction still comes first.
   return rows.slice().reverse()
     .sort((a, b) => day(b).localeCompare(day(a))).map(t => {
     const cls = t.type === "income" ? "in" : t.type === "expense" ? "out" : "move";
@@ -1229,19 +1241,21 @@ function tableBody(rows, {column, hideCategory}) {
     // entered by hand can have its date or amount changed, or be deleted: a
     // bank row is the bank's, so those two cells carry no data-edit on it.
     // The type tag names its own field, since it shares the cell with the
-    // category. The row's id and series size sit on the <tr>.
+    // category. The row's id and series size sit on the <tr>, which takes the
+    // keyboard focus so Enter can open an editor too.
     return `<tr class="${t.whatif ? "whatif" : t.provisional ? "provisional" : ""}" data-id="${t.id}"
-        data-series="${t.series || 0}">
+        data-series="${t.series || 0}" tabindex="0">
       <td class="date num"${t.manual ? ' data-edit="date"' : ""}>${t.manual
           ? '<button class="rowbtn del" type="button" aria-label="Delete this row" title="Delete">×</button>' : ""}${day(t)}</td>
-      <td class="desc" data-edit="description" title="${esc(t.description)}${t.provisional
-          ? " — not yet confirmed by the bank, this row may still change" : ""}">${esc(t.description)}</td>
+      <td class="desc" data-edit="description" title="${esc(t.description)}">${esc(t.description)}</td>
       <td class="tags" data-edit="category">${t.whatif
           ? `<span class="tag whatif" title="${t.covered
               ? "The bank's rows now cover this day. Delete this what-if if it happened, or it is counted twice."
               : "A plan you entered. The bank has no such row."}">what-if${t.covered ? " · covered" : ""}</span> `
           : t.covered
           ? `<span class="tag whatif" title="The bank's rows now cover this day. Delete this row if the bank lists it, or it is counted twice.">covered</span> `
+          : t.provisional
+          ? `<span class="tag" title="The bank has not confirmed this row yet, so it may still change.">provisional</span> `
           : ""}<span class="tag ${cls}" data-edit="type">${esc(t.type)}</span>${t.category && !hideCategory
           ? ` <span class="tag cat" title="${esc(t.category)}" style="--tag:${colourFor(t.category)}">${esc(t.category)}</span>` : ""}</td>
       <td class="r amt num ${cls}"${t.manual ? ' data-edit="amount"' : ""}>${money(t.amount, true)}</td>
@@ -1254,15 +1268,16 @@ function tableMeta(rows) {
   const sum = totals(rows);
   return `<span class="in">in ${money(sum.income)}</span> ·
     <span class="out">out ${money(sum.spend)}</span> ·
-    ${sum.count.toLocaleString()} rows`;
+    ${plural(sum.count, "row")}`;
 }
 
 // One transaction table, used by the account ledger and by the category
 // drill-down. They differ only in the last column: a ledger wants the running
 // balance, a category spanning several accounts wants to say which account.
 // `key` names the table for searching: the account id, or "drill" if not given.
-// `fold` is true or false for a table that folds, open or collapsed, and left
-// out for one that does not.
+// `fold` is true or false for a table that can collapse, open or collapsed,
+// and left out for one that cannot. A collapsed table gets no rows: setOpen
+// builds them when it opens, so All accounts only draws what is on screen.
 function transactionTable(title, rows, {column = "balance", hideCategory = false, key = "drill", fold} = {}) {
   const opts = {column, hideCategory};
   tables.set(String(key), {rows, opts});
@@ -1285,14 +1300,14 @@ function transactionTable(title, rows, {column = "balance", hideCategory = false
         ? '<th class="acct">Account</th>'
         : '<th class="bal r">Balance</th>'}
     </tr></thead>
-    <tbody>${tableBody(rows, opts)}</tbody>
+    <tbody>${fold === false ? "" : tableBody(rows, opts)}</tbody>
     ${column === "balance" ? `<tfoot><tr class="add">${ADD_REST}</tr></tfoot>` : ""}
   </table></div>`;
 }
 
 // "ANZ Everyday · 2026", or "ANZ Everyday · 1 Mar 2026 to 15 Sep 2026". All
 // years adds nothing: a title with no period on it already means every year.
-// Only All accounts folds its tables; an account's own page has one table,
+// Only All accounts collapses its tables; an account's own page has one table,
 // and hiding it would leave the page empty.
 const tableFor = account =>
   transactionTable(`${account.bank} ${account.label}` + (rangeLabel() || state.year ? " · " + periodLabel() : ""),
@@ -1311,10 +1326,9 @@ function renderTables() {
 }
 
 // ---------- holdings ----------
-// A term deposit produces no statement, so its balance can only be typed in.
-// It counts towards net worth and never towards income or spending.
 // Term deposits and investments differ only in the label. Both are money no
-// statement covers, typed in by hand and counted in net worth.
+// statement covers, so the balance can only be typed in. It counts towards net
+// worth and never towards income or spending.
 const KINDS = {
   "term deposit": {tab: "holdings", title: "Term deposits", one: "a term deposit",
                    name: "Term deposit 12345", place: "Westpac"},
@@ -1389,10 +1403,9 @@ function renderHoldings(kind) {
   const mine = DATA.holdings.filter(h => (h.kind || "term deposit") === kind);
   const held = mine.reduce((n, h) => n + h.balance, 0);
 
-  // The Investments tab used to claim this balance was part of the parked
-  // figure. It is not: every cent of parked money is term-deposit principal,
-  // and no broker transfer appears anywhere in the statements. Whatever funded
-  // this went out before the history, or from an account with no statements.
+  // An investment balance stands on what you enter. The statements hold no
+  // broker transfer to check it against, so the hint says so instead of a
+  // table.
   const hint = kind === "term deposit" ? depositExplainer(held) : `<div class="hint">
       Anything here is counted in net worth and never in income or spending.
       Nothing in your statements pays a broker, so these balances stand on what
@@ -1450,15 +1463,26 @@ function renderHoldings(kind) {
     // A successful save redraws the form; after a failure it has to work again.
     const button = form.querySelector("[type=submit]");
     button.disabled = true;
-    await save({
+    const item = {
       kind,
       id: data.id ? +data.id : undefined,
       name: data.name.trim(),
       institution: data.institution.trim() || null,
       balance,
       as_at: data.as_at || null,
-    });
-    button.disabled = false;
+    };
+    try {
+      DATA.holdings = await request("/api/holdings", {
+        method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(item),
+      });
+      render();
+      // render() drew the form afresh and empty. Its first field is the place
+      // to be for the next entry.
+      root.querySelector("[name=name]").focus();
+    } catch (e) {
+      alert("Could not save: " + e.message);
+      button.disabled = false;
+    }
   };
   root.querySelector(".reset-form").onclick = () => {
     form.reset();
@@ -1476,12 +1500,16 @@ function renderHoldings(kind) {
     root.querySelector(".form-title").textContent = "Edit " + h.name;
     form.scrollIntoView({behavior: "smooth", block: "center"});
   });
-  root.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+  root.querySelectorAll("[data-del]").forEach((b, i) => b.onclick = async () => {
     const h = mine.find(x => x.id === +b.dataset.del);
     if (confirm(`Delete "${h.name}"? Net worth drops by ${money(h.balance)}.`)) {
       try {
         DATA.holdings = await request("/api/holdings/" + h.id, {method: "DELETE"});
         render();
+        // The row went. Focus the delete button now in its place, or the form
+        // when it was the last one.
+        const buttons = root.querySelectorAll("[data-del]");
+        (buttons[Math.min(i, buttons.length - 1)] || root.querySelector("[name=name]")).focus();
       } catch (e) { alert("Could not delete: " + e.message); }
     }
   });
@@ -1492,12 +1520,13 @@ function renderHoldings(kind) {
 // question "what do I spend on food" is not per account.
 // `hidden` holds the categories ticked OFF, not the ones ticked on. Empty means
 // everything is included, which is the default, and a category that appears
-// later — because you widened the period or added an account — starts included
+// later, because you widened the period or added an account, starts included
 // without anyone having to remember to tick it.
-// from/to start undefined, meaning "not chosen yet", so the default period can
-// be applied once on the first render. null means deliberately all time.
-// preset is the period button last chosen, and null once dates are typed.
-const analysis = {accounts: null, from: undefined, to: undefined, preset: null,
+// from/to are the period; null at either end means open. preset is the period
+// button last chosen, and null once dates are typed. It is remembered rather
+// than matched from the dates, because two presets can start on the same day:
+// on 30 January, "30 days" and "This year" both start on 1 January.
+const analysis = {accounts: null, from: null, to: null, preset: null,
                   category: null, hidden: new Set()};
 
 const catOf = t => t.category || "Uncategorised";
@@ -1508,7 +1537,7 @@ const isoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "
 function monthsAgo(n) {
   const now = new Date(), then = new Date();
   then.setMonth(then.getMonth() - n);
-  // setMonth rolls forward when the target month is shorter — 31 March minus
+  // setMonth rolls forward when the target month is shorter: 31 March minus
   // one month lands back in March. Pull it to the last day of the month meant.
   if (then.getDate() !== now.getDate()) then.setDate(0);
   return isoDay(then);
@@ -1531,17 +1560,14 @@ const applyPeriod = key => {
   analysis.from = PERIODS.find(p => p.key === key).from();
   analysis.to = null;
 };
-
-// The preset button to light, if any. Remembered rather than matched from the
-// dates, because two presets can start on the same day: on 30 January, "30
-// days" and "This year" both start on 1 January.
-const activePeriod = () => analysis.preset;
+// The page opens on the default period. A URL naming another applies its own.
+applyPeriod(DEFAULT_PERIOD);
 
 // When the money actually moved, which is the question this page asks. The
 // ledger stays on the bank's posting date because that is what orders the
 // statement and the running balance. They differ by up to 8 days: posting
-// dates fall on no weekend at all, and 301 transactions post in the month
-// after the one they were spent in.
+// dates fall on no weekend at all, and a purchase late in a month often posts
+// in the next one.
 const spentOn = t => t.spent_on || t.date;
 
 // Rows of one type inside the chosen accounts and period. Income and spending
@@ -1558,37 +1584,32 @@ function windowRows(type) {
     spentOn(t) <= to);
 }
 
-function analysisRows() { return windowRows("expense"); }
-function incomeRows() { return windowRows("income"); }
-
 // How many days an average is spread over: the chosen period, cut to the first
-// and last dates loaded for the chosen accounts. A day inside the statements
-// with no spending still counts. A day outside them is unknown, not zero, so
-// calendar 2026 divides by the days loaded so far rather than by 365. The
+// and last bank rows of the chosen accounts. A day inside the statements with
+// no spending still counts. A day outside them is unknown, not zero, so a
+// calendar year divides by the days loaded so far rather than by 365. The
 // category ticks play no part, so the cards and the drill-down share one count.
 function periodDays() {
-  // Without a To of your own the window ends today (see windowRows), so a
-  // plan dated later is not measured either: the period ends on the last row
-  // up to today, not on the plan.
-  const today = isoDay(new Date());
-  const dates = DATA.transactions.filter(t => analysis.accounts.has(t.account)).map(spentOn)
-    .filter(d => analysis.to || d <= today).sort();
+  // Bank rows only, up to the To given or today, as windowRows does: a plan
+  // dated later is not a day loaded, so the period ends on the last real row
+  // inside the window.
+  const end = analysis.to || isoDay(new Date());
+  const dates = DATA.real.filter(t => analysis.accounts.has(t.account)).map(spentOn)
+    .filter(d => d <= end).sort();
   if (!dates.length) return 1;
   const first = dates[0], last = dates[dates.length - 1];
   const from = analysis.from && analysis.from > first ? analysis.from : first;
-  const to = analysis.to && analysis.to < last ? analysis.to : last;
   // Inclusive: 1 Jan to 31 Dec is 365 days, not 364.
-  return Math.max(1, (new Date(to) - new Date(from)) / 86400000 + 1);
+  return Math.max(1, (new Date(last) - new Date(from)) / 86400000 + 1);
 }
 
 function renderAnalysis() {
   if (analysis.accounts === null) analysis.accounts = new Set(DATA.accounts.map(a => a.id));
-  if (analysis.from === undefined) applyPeriod(DEFAULT_PERIOD);
 
   // Everything the accounts and period select, before the category ticks. The
   // table lists all of these, so a category you have ticked off is still there
   // to tick back on, and the drill-down still works on it.
-  const all = analysisRows();
+  const all = windowRows("expense");
   const listed = tally(all);
 
   // What the cards and charts are about: the ticked categories only.
@@ -1600,7 +1621,7 @@ function renderAnalysis() {
   // What you saved. Net weighs income against every expense in the window, not
   // against the ticked ones, so ticking Rent off cannot make savings look
   // bigger than they were.
-  const deposits = incomeRows();
+  const deposits = windowRows("income");
   const income = deposits.reduce((n, t) => n + t.amount, 0);
   const spentAll = all.reduce((n, t) => n - t.amount, 0);
   const net = income - spentAll;
@@ -1613,7 +1634,7 @@ function renderAnalysis() {
   if (panel.contains(document.activeElement) && document.activeElement.type === "date") {
     panel.querySelector(".analysis-body").innerHTML = body;
     panel.querySelectorAll(".period").forEach(chip =>
-      chip.setAttribute("aria-current", String(activePeriod() === chip.dataset.period)));
+      chip.setAttribute("aria-current", String(analysis.preset === chip.dataset.period)));
   } else {
     panel.innerHTML = `
     <div class="title"><h2>Spending analysis</h2>
@@ -1691,26 +1712,28 @@ function controlsHtml() {
       <div><div class="caption" style="margin-bottom:6px">Period</div>
         <div class="picker">
           ${PERIODS.map(p => `<button class="chip period" type="button" data-period="${p.key}"
-            aria-current="${activePeriod() === p.key}">${p.label}</button>`).join("")}
+            aria-current="${analysis.preset === p.key}">${p.label}</button>`).join("")}
         </div>
         <div class="picker" style="margin-top:6px">
-          <label style="padding:0"><input type="date" class="from-date" value="${analysis.from || ""}"
-            style="border:0;background:none;font:inherit;color:inherit;padding:5px 8px"></label>
-          <label style="padding:0"><input type="date" class="to-date" value="${analysis.to || ""}"
-            style="border:0;background:none;font:inherit;color:inherit;padding:5px 8px"></label>
+          <label><input type="date" class="from-date" aria-label="From" value="${analysis.from || ""}"></label>
+          <label><input type="date" class="to-date" aria-label="To" value="${analysis.to || ""}"></label>
         </div></div>
     </div>`;
 }
 
+// render() rebuilds the controls, so each handler ends by focusing the new copy
+// of the control it was on, and a keyboard keeps its place.
 function wireControls(root) {
   root.querySelectorAll(".acct-picker [data-acct]").forEach(box => box.onchange = () => {
     box.checked ? analysis.accounts.add(+box.dataset.acct)
                 : analysis.accounts.delete(+box.dataset.acct);
     render();
+    root.querySelector(`[data-acct="${box.dataset.acct}"]`).focus();
   });
   root.querySelectorAll(".all-accts").forEach(box => box.onchange = () => {
     analysis.accounts = box.checked ? new Set(DATA.accounts.map(a => a.id)) : new Set();
     render();
+    root.querySelector(".all-accts").focus();
   });
   // A date input fires `change` as each segment is completed, so typing 2026
   // into the year arrives as 0002, 0020, 0202 and only then 2026. Re-rendering
@@ -1729,8 +1752,19 @@ function wireControls(root) {
     analysis.to = input.value || null; typed();
   });
   root.querySelectorAll(".period").forEach(button => button.onclick = () => {
-    applyPeriod(button.dataset.period); render();
+    applyPeriod(button.dataset.period);
+    render();
+    root.querySelector(`.period[data-period="${button.dataset.period}"]`).focus();
   });
+}
+
+// Open, the drill-down is a dialog and the only thing on offer: the layout
+// under it is inert, so Tab and a screen reader cannot wander into it. The
+// chat bar is outside the layout and stays live.
+function showDrill(open) {
+  document.getElementById("drill").hidden = !open;
+  document.body.classList.toggle("locked", open);
+  document.querySelector(".layout").inert = open;
 }
 
 // The drill-down covers the window. The page stays rendered behind it, so
@@ -1738,12 +1772,8 @@ function wireControls(root) {
 function renderDrill(rows, spent, days) {
   const panel = document.getElementById("drill");
   const name = analysis.category;
-  if (!name) {
-    panel.hidden = true;
-    document.body.classList.remove("locked");
-    return;
-  }
-  const catRows = rows.filter(t => (t.category || "Uncategorised") === name);
+  if (!name) return showDrill(false);
+  const catRows = rows.filter(t => catOf(t) === name);
   const share = (100 * catRows.reduce((n, t) => n - t.amount, 0) / (spent || 1)).toFixed(1);
 
   document.getElementById("drillName").innerHTML =
@@ -1758,8 +1788,7 @@ function renderDrill(rows, spent, days) {
   // Focus moves into the overlay only as it opens. A later render, such as a
   // period picked inside it, is not a reason to move it.
   const opening = panel.hidden;
-  panel.hidden = false;
-  document.body.classList.add("locked");
+  showDrill(true);
   panel.scrollTop = 0;
   drawDrillChart(name, catRows);
   wireControls(panel);
@@ -1780,11 +1809,14 @@ function closeDrill() {
 document.getElementById("drillClose").onclick = closeDrill;
 document.addEventListener("keydown", event => {
   // Esc closes one thing at a time, the one on top: a table's search box, then
-  // full screen, then the chat, then the drill-down overlay. The chat's own Esc used to bubble on
-  // up to here too, so dismissing it also shut the drill-down underneath.
+  // full screen, then the chat, then the drill-down overlay. One press never
+  // closes two.
   if (event.key !== "Escape") return;
   if (event.target.classList && event.target.classList.contains("find")) {
-    return closeFind(event.target.closest(".tablewrap"));
+    const wrap = event.target.closest(".tablewrap");
+    closeFind(wrap);
+    // The box has gone. Its button is back in its place, so focus goes there.
+    return wrap.querySelector(".findbtn").focus();
   }
   const chat = document.getElementById("agent");
   if (chat.classList.contains("full")) return agentFull(false);
@@ -1845,12 +1877,14 @@ function restoreFind() {
     find.query = "";
     return writeUrl();
   }
-  unfold(wrap);
   const box = wrap.querySelector(".find");
   box.value = find.query;
   box.hidden = false;
   wrap.querySelector(".findbtn").hidden = true;
   findIn(wrap);
+  // Opened after the search: the search has just built the rows, so setOpen
+  // has nothing to build for a table drawn collapsed.
+  unfold(wrap);
 }
 
 document.addEventListener("click", event => {
@@ -1875,22 +1909,27 @@ document.addEventListener("input", event => {
   }
 });
 
-// A search box emptied by its own clear button gets out of the way again.
+// A search box emptied by its own clear button, or by Enter on nothing, gets
+// out of the way again. Its button takes the focus, as after Esc.
 document.addEventListener("search", event => {
   const box = event.target;
   if (box.classList && box.classList.contains("find") && !box.value) {
-    closeFind(box.closest(".tablewrap"));
+    const wrap = box.closest(".tablewrap");
+    closeFind(wrap);
+    wrap.querySelector(".findbtn").focus();
   }
 });
 
 // ---------- editing a row ----------
-// Double-click a cell to change it. One listener for every table, so it keeps
-// working after any re-render. The row's id is on the <tr>; the field is the
-// data-edit attribute on the cell, or on the type tag, which shares its cell
-// with the category.
+// Double-click a cell to change it, or focus the row and press Enter. One
+// listener each for every table, so they keep working after any re-render. The
+// row's id is on the <tr>; the field is the data-edit attribute on the cell,
+// or on the type tag, which shares its cell with the category.
 const TYPES = ["automatic", "income", "expense", "transfer"];
 const REPEATS = ["once", "weekly", "fortnightly", "monthly", "quarterly", "yearly"];
 const AMOUNT_HINT = "Amount must be a number, like -12.34 or 1,234.56";
+// The editable cells, left to right across a row. Tab moves along them.
+const FIELDS = ["date", "description", "type", "category", "amount"];
 const options = (list, current) =>
   list.map(v => `<option${v === current ? " selected" : ""}>${v}</option>`).join("");
 
@@ -1903,9 +1942,18 @@ document.addEventListener("dblclick", event => {
   if (t) edit(target, t);
 });
 
+// Enter on the row itself opens its description, the cell every row can edit.
+document.addEventListener("keydown", event => {
+  const row = event.target.closest && event.target.closest("tr[data-id]");
+  if (!row || event.target !== row || event.key !== "Enter") return;
+  const t = DATA.all.find(x => x.id === +row.dataset.id);
+  if (t) { event.preventDefault(); edit(row.querySelector('[data-edit="description"]'), t); }
+});
+
 function edit(target, t) {
   const field = target.dataset.edit;
   const td = target.closest("td");
+  const table = td.closest(".tablewrap").dataset.table;
   const saved = td.innerHTML;
   const before = {description: t.description, category: t.category || "", type: t.type,
                   date: t.date, amount: t.amount}[field];
@@ -1932,10 +1980,23 @@ function edit(target, t) {
   // The list opens on the double-click itself. Not every browser has this.
   if (field === "type") try { editor.showPicker(); } catch {}
 
+  // Where the focus goes once the editor is gone. A blur leaves it where the
+  // click put it. A key goes back to the row, found afresh by id since a save
+  // redraws every table, or for Tab on to the next editable cell along it.
+  const settle = step => {
+    if (step === undefined) return;
+    const row = document.querySelector(`.tablewrap[data-table="${table}"] tr[data-id="${t.id}"]`);
+    if (!row) return;
+    const cells = FIELDS.map(f => row.querySelector(`[data-edit="${f}"]`)).filter(Boolean);
+    const next = step && cells[cells.findIndex(c => c.dataset.edit === field) + step];
+    if (next) edit(next, DATA.all.find(x => x.id === t.id));
+    else row.focus({preventScroll: true});
+  };
+
   // Enter, blur and the type list's change can all fire for one edit, and the
   // restore below removes the editor, which blurs it too. The first one wins.
   let done = false;
-  const finish = async keep => {
+  const finish = async (keep, step) => {
     if (done) return;
     done = true;
     // Chrome blurs an editor a re-render removes, Firefox does not. Neither
@@ -1951,7 +2012,7 @@ function edit(target, t) {
       // A date the browser could not complete arrives as "": nothing to save.
       if (field === "date" && !value) keep = false;
     }
-    if (!keep || value === before) { td.innerHTML = saved; return; }
+    if (!keep || value === before) { td.innerHTML = saved; return settle(step); }
     td.setAttribute("aria-busy", "true");
     editor.disabled = true;
     try {
@@ -1961,19 +2022,22 @@ function edit(target, t) {
       alert("Could not save: " + e.message);
       td.innerHTML = saved;
       td.removeAttribute("aria-busy");
-      return;
+      return settle(step);
     }
     await reload();
+    settle(step);
   };
   editor.addEventListener("keydown", event => {
     // Stopped here: Escape would otherwise close the drill-down under the
     // editor, and the page's own Escape and Enter handling has no part in this.
-    if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); event.stopPropagation(); finish(true); }
-    if (event.key === "Escape") { event.stopPropagation(); finish(false); }
+    if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); event.stopPropagation(); finish(true, 0); }
+    if (event.key === "Escape") { event.stopPropagation(); finish(false, 0); }
+    // Tab saves as Enter does, then opens the next cell's editor.
+    if (event.key === "Tab") { event.preventDefault(); event.stopPropagation(); finish(true, event.shiftKey ? -1 : 1); }
   });
   editor.addEventListener("blur", () => finish(true));
   // Picking from the list is the whole edit; no Enter needed after it.
-  if (field === "type") editor.addEventListener("change", () => finish(true));
+  if (field === "type") editor.addEventListener("change", () => finish(true, 0));
 }
 
 // ---------- adding a row ----------
@@ -2005,7 +2069,9 @@ function openAdd(row) {
     if (event.key === "Enter" && !event.isComposing) { event.preventDefault(); event.stopPropagation(); submitAdd(row); }
     if (event.key === "Escape") { event.stopPropagation(); closeAdd(row); }
   };
-  row.querySelector("[name=description]").focus();
+  // No scroll: the row is in view already, under the button just pressed. A
+  // phone would otherwise jump to put the box mid-screen.
+  row.querySelector("[name=description]").focus({preventScroll: true});
 }
 
 function closeAdd(row) {
@@ -2091,8 +2157,9 @@ function overviewBody(rows, ranked, spent, days, listed, {income, deposits, net}
   // Net is income minus all spending, so the spending behind it is income - net.
   let netNote = income === 0 ? "no income in this period"
     : net >= 0 ? `${Math.round(100 * net / income)}% of income saved`
-    // A tiny income makes "x% more than came in" absurd: one 39c interest deposit
-    // in 30 days read 253933%. What income covered stays readable at any size.
+    // A tiny income makes "x% more than came in" absurd: a few cents of interest
+    // against a month's spending reads as a six-figure percentage. What income
+    // covered stays readable at any size.
     : `income covered ${Math.round(100 * income / (income - net))}% of spending`;
   // Total spent has dropped the unticked categories but Net has not. Say so,
   // or the two cards look like they disagree.
@@ -2258,9 +2325,7 @@ function drawAnalysisCharts(rows, ranked) {
     backgroundColor: name === "Everything else" ? css("--ink-faint") : colourFor(name),
     data: months.map(m => rows
       .filter(t => monthOf(spentOn(t)) === m &&
-        (name === "Everything else"
-          ? !top.includes(t.category || "Uncategorised")
-          : (t.category || "Uncategorised") === name))
+        (name === "Everything else" ? !top.includes(catOf(t)) : catOf(t) === name))
       .reduce((n, t) => n - t.amount, 0)),
   })).filter(d => d.data.some(v => v));
   draw("catTrend", {
@@ -2277,12 +2342,11 @@ function drawAnalysisCharts(rows, ranked) {
 // A category says where money came from, which `type` cannot. Salary and money
 // from your parents are both income, and worth telling apart.
 function renderRules() {
-  // Transfers are excluded here as they are everywhere else. Summing them in
-  // made "Paying people" read more than all-time income, by adding money
-  // moved between the user's own accounts — about two thirds of it — to
-  // the real spending.
+  // Bank rows only, whatever the toggle: a rule labels what happened, and a
+  // plan has not. Transfers are excluded here as they are everywhere else;
+  // summed in, money moved between your own accounts would count as spending.
   const byCategory = {};
-  for (const t of DATA.transactions) {
+  for (const t of DATA.real) {
     if (!t.category || t.type === "transfer") continue;
     (byCategory[t.category] ||= {total: 0}).total += t.amount;
   }
@@ -2300,7 +2364,7 @@ function renderRules() {
     </tr>`;
   }).join("");
 
-  const uncategorised = DATA.transactions
+  const uncategorised = DATA.real
     .filter(t => t.type === "income" && !t.category)
     .reduce((n, t) => n + t.amount, 0);
 
@@ -2310,7 +2374,7 @@ function renderRules() {
     <div class="hint">A rule matches a regular expression against the description,
       ignoring case. Rules run in the order added and the last match wins, so write a
       broad rule first and narrow it with a later one. A few rules also set the type,
-      for wording whose meaning the bank has already settled — money going into a term
+      for wording whose meaning the bank has already settled: money going into a term
       deposit is a transfer, not spending.</div>
     <div class="tablewrap" style="margin-bottom:14px"><div class="tcap"><span class="grp">Rules</span>
         <span class="meta">unlabelled income ${money(uncategorised)}</span></div><table class="fixed">
@@ -2336,14 +2400,17 @@ function renderRules() {
     </div>`;
 
   // Hit counts are not in data.json: matching every pattern against every row
-  // took most of the export's time, and only this page shows them. They arrive
-  // a moment after the table, into the cells still on screen. A failed count
-  // leaves the dots; nothing else on the page depends on it.
-  request("/api/rules").then(rules => {
+  // took most of the export's time, and only this page shows them. Asked for
+  // once per load of the data, the request itself kept on DATA, so a redraw
+  // does not ask again, even one while the counts are still coming. They
+  // arrive a moment after the table, into the cells still on screen. A failed
+  // count leaves the dots; nothing else on the page depends on it.
+  DATA.hits ||= request("/api/rules").then(rules => Object.fromEntries(rules.map(r => [r.id, r.matches])));
+  DATA.hits.then(hits => {
     if (state.account !== "rules") return;
-    for (const r of rules) {
-      const cell = document.querySelector(`#rules [data-hits="${r.id}"]`);
-      if (cell) cell.textContent = r.matches;
+    for (const [id, n] of Object.entries(hits)) {
+      const cell = document.querySelector(`#rules [data-hits="${id}"]`);
+      if (cell) cell.textContent = n;
     }
   }).catch(() => {});
 
@@ -2360,16 +2427,22 @@ function renderRules() {
         body: JSON.stringify({category: data.category.trim(), pattern: data.pattern.trim()}),
       });
       await reload();
+      // reload() drew the form afresh and empty, ready for the next rule.
+      document.querySelector("#ruleForm [name=category]").focus();
     } catch (e) { alert("Could not add: " + e.message); }
     button.disabled = false;
   };
-  document.querySelectorAll("[data-delrule]").forEach(b => b.onclick = async () => {
+  document.querySelectorAll("[data-delrule]").forEach((b, i) => b.onclick = async () => {
     const rule = DATA.rules.find(r => r.id === +b.dataset.delrule);
     if (!confirm(`Remove the rule labelling "${rule.pattern}" as ${rule.category}? `
                  + "Its transactions are relabelled by the rules that remain.")) return;
     try {
       await request("/api/rules/" + b.dataset.delrule, {method: "DELETE"});
       await reload();
+      // The row went. Focus the remove button now in its place, or the form
+      // when it was the last one.
+      const buttons = document.querySelectorAll("[data-delrule]");
+      (buttons[Math.min(i, buttons.length - 1)] || document.querySelector("#ruleForm [name=category]")).focus();
     } catch (e) { alert("Could not remove: " + e.message); }
   });
 }
@@ -2384,6 +2457,15 @@ function takeData(fresh) {
   DATA.rules = DATA.rules || [];
   DATA.all = DATA.transactions;
   DATA.real = DATA.all.filter(t => !t.whatif);
+  // Every category in use plus the rules' own, sorted once. A category's place
+  // in this list picks its colour, so hidden what-ifs are in too and the
+  // toggle cannot shift the hues. The category editors offer the same list.
+  DATA.categories = [...new Set([...DATA.all.map(t => t.category), ...DATA.rules.map(r => r.category)])]
+    .filter(Boolean).sort();
+  document.getElementById("categories").innerHTML =
+    DATA.categories.map(c => `<option value="${esc(c)}">`).join("");
+  // The rules page fetches its hit counts once per load of the data.
+  DATA.hits = null;
 }
 
 // Any change to a row, or to the rules, rebuilds the whole export server side.
@@ -2404,15 +2486,6 @@ async function request(url, options) {
   return response.json();
 }
 
-async function save(item) {
-  try {
-    DATA.holdings = await request("/api/holdings", {
-      method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(item),
-    });
-    render();
-  } catch (e) { alert("Could not save: " + e.message); }
-}
-
 // Quotes too: the result also goes inside attribute values, where a bare " would
 // end the value and let the rest of a name or URL parameter add attributes.
 const esc = t => String(t).replace(/[<>&"']/g, c =>
@@ -2422,10 +2495,10 @@ const esc = t => String(t).replace(/[<>&"']/g, c =>
 // bookmark or a link opens the same screen instead of All accounts.
 const TABS = ["holdings", "investments", "rules", "analysis"];
 
-// The view and drill-down the URL held when last written. Changing either adds
-// a history entry, so Back returns to the previous screen instead of leaving
-// the app. Anything else (a year, a period, a tick, typing a search) replaces
-// the current entry.
+// The view the URL held when last written. Changing it adds a history entry,
+// so Back returns to the previous screen instead of leaving the app. Anything
+// else (a year, a period, a tick, a search, the drill-down) replaces the
+// current entry. Esc and ✕ close the drill-down, so Back must not reopen it.
 let place = null;
 
 function writeUrl() {
@@ -2434,8 +2507,7 @@ function writeUrl() {
   // from and to are the range of the view on screen: the analysis period, or an
   // account view's custom range. The other tabs are filtered by neither.
   if (state.account === "analysis") {
-    const period = activePeriod();
-    if (period) p.set("period", period);
+    if (analysis.preset) p.set("period", analysis.preset);
     else {
       if (analysis.from) p.set("from", analysis.from);
       if (analysis.to) p.set("to", analysis.to);
@@ -2456,7 +2528,7 @@ function writeUrl() {
   if (analysis.category && state.account === "analysis") p.set("cat", analysis.category);
   if (find.query) { p.set("q", find.query); if (find.table) p.set("qt", find.table); }
   const url = location.pathname + "?" + p;
-  const here = p.get("view") + " " + (p.get("cat") || "");
+  const here = p.get("view");
   if (place && place !== here) history.pushState(null, "", url);
   else history.replaceState(null, "", url);
   place = here;
@@ -2488,7 +2560,7 @@ function readUrl(search = location.search) {
       analysis.from = day("from");
       analysis.to = day("to");
       analysis.preset = null;
-    }
+    } else applyPeriod(DEFAULT_PERIOD);       // no period named is the default one
   } else if (!TABS.includes(state.account)) {
     if (day("from") || day("to")) {
       state.from = day("from");
@@ -2502,9 +2574,11 @@ function readUrl(search = location.search) {
   // These reset when absent, so Back and the agent's "" can close the
   // drill-down, drop a search, bring back every account and category, or
   // show the what-ifs again.
-  analysis.accounts = p.has("accts") ? new Set(p.get("accts").split(",").map(Number)) : null;
+  analysis.accounts = p.has("accts") ? new Set(p.get("accts").split(",").map(Number).filter(Boolean)) : null;
   analysis.hidden = new Set(p.get("hide") ? p.get("hide").split("~") : []);
-  analysis.category = p.get("cat");
+  // A category nothing carries would open an empty drill-down.
+  const cat = p.get("cat");
+  analysis.category = cat && (cat === "Uncategorised" || DATA.categories.includes(cat)) ? cat : null;
   find.query = p.get("q") || "";
   find.table = p.get("qt");
   state.whatif = p.get("whatif") !== "0";
@@ -2666,8 +2740,8 @@ const VIEW_NAMES = {all: "all accounts", analysis: "spending analysis",
                     holdings: "term deposits", investments: "investments",
                     rules: "rules"};
 
-// "showing you spending analysis · last 12 months · 8 of 41 categories", not
-// every parameter spelled out. Hiding 33 categories used to print all 33 names.
+// "showing you spending analysis · last 12 months · 8 of 41 categories": a
+// count of the hidden categories, not every name the parameter carries.
 // The parameters pick which parts to mention; the words come from the page once
 // it has applied them, so a value it ignored is never reported as shown.
 function describeView(params) {
@@ -2677,13 +2751,13 @@ function describeView(params) {
   if (!TABS.includes(state.account) && ("view" in params || "year" in params || "from" in params || "to" in params))
     parts.push(periodLabel());
   if (state.account === "analysis" && ("view" in params || "period" in params || "from" in params || "to" in params)) {
-    const preset = PERIODS.find(p => p.key === activePeriod());
+    const preset = PERIODS.find(p => p.key === analysis.preset);
     if (preset) parts.push({ytd: "this year", all: "all time"}[preset.key] || "last " + preset.label);
     else if (analysis.from || analysis.to)
       parts.push(`${analysis.from || "the start"} to ${analysis.to || "now"}`);
   }
   if (state.account === "analysis" && "hide" in params) {
-    const names = tally(analysisRows()).map(([name]) => name);
+    const names = tally(windowRows("expense")).map(([name]) => name);
     parts.push(`${names.filter(n => !analysis.hidden.has(n)).length} of ${names.length} categories`);
   }
   if ("cat" in params && analysis.category) parts.push(`${analysis.category} in detail`);
@@ -2697,7 +2771,7 @@ function agentEvent(turn, event) {
   const said = turn.querySelector(".said");
   if (event.type === "text") {
     // Each event is a whole block of text. Separate blocks are separate
-    // thoughts — one before a query, one after — so each becomes a paragraph.
+    // thoughts, one before a query and one after, so each becomes a paragraph.
     said.dataset.raw = said.dataset.raw ? said.dataset.raw + "\n\n" + event.text : event.text;
     said.innerHTML = md(said.dataset.raw);
   } else if (event.type === "tool") {
@@ -2706,8 +2780,8 @@ function agentEvent(turn, event) {
   } else if (event.type === "query") {
     // Replace the "querying" line with the query itself, there to be checked.
     const pending = turn.querySelector('.step[data-tool="run_query"]');
-    const html = `<details class="work"><summary>· ${esc(event.purpose || "query")}
-        — ${event.rows.toLocaleString()} rows</summary><pre>${esc(event.sql)}</pre></details>`;
+    const html = `<details class="work"><summary>· ${esc(event.purpose || "query")},
+        ${plural(event.rows, "row")}</summary><pre>${esc(event.sql)}</pre></details>`;
     pending ? pending.outerHTML = html : agentStep(turn, html);
   } else if (event.type === "read") {
     const pending = turn.querySelector('.step[data-tool="read_rows"]');
@@ -2772,7 +2846,7 @@ function applyView(params) {
 }
 
 // Thinking means a model call or a tool is actually in flight. The moment the
-// agent hands back — with an answer, or with a question for you — it stops.
+// agent hands back, with an answer or with a question for you, it stops.
 function agentThinking(on) {
   agentLog().setAttribute("aria-busy", on ? "true" : "false");
   document.getElementById("agentSpin").hidden = !on;
@@ -2924,7 +2998,7 @@ function wireAgent() {
   document.getElementById("agentFull").onclick = () =>
     agentFull(!agentBox().classList.contains("full"));
   // Over the chat, the wheel scrolls the conversation or the box you are typing
-  // in — never the page behind. When either reaches its end the scroll stops
+  // in, never the page behind. When either reaches its end the scroll stops
   // there instead of carrying on into the tables underneath.
   agentBox().addEventListener("wheel", event => {
     if (!event.deltaY) return;                      // sideways, e.g. a wide query
@@ -2972,11 +3046,6 @@ function render() {
   // The toggle: every view reads DATA.transactions, so hiding the plans is
   // one line here rather than a filter in each of them.
   DATA.transactions = state.whatif ? DATA.all : DATA.real;
-  // The category editors' suggestions: every category in use plus the rules'
-  // own, so a name a rule knows but no row carries yet is still offered.
-  document.getElementById("categories").innerHTML =
-    [...new Set([...DATA.all.map(t => t.category), ...DATA.rules.map(r => r.category)])]
-      .filter(Boolean).sort().map(c => `<option value="${esc(c)}">`).join("");
   writeUrl();
   renderSidebar();
   const view = TABS.includes(state.account) ? state.account : "ledger";
@@ -2987,8 +3056,7 @@ function render() {
   // Leaving the analysis view must take the overlay with it. Nothing else
   // calls renderDrill, so without this it would stay on screen.
   analysis.category = null;
-  document.getElementById("drill").hidden = true;
-  document.body.classList.remove("locked");
+  showDrill(false);
   // These views have no transaction table, so restoreFind drops any search.
   if (view === "holdings") { renderHoldings("term deposit"); return restoreFind(); }
   if (view === "investments") { renderHoldings("investment"); return restoreFind(); }
@@ -3003,7 +3071,9 @@ function render() {
   writeUrl();          // again: renderYears has just settled state.year
 }
 
-fetch("data.json")
+// no-cache: data.json is rewritten after every change, and a reload may reuse
+// a cached copy for hours otherwise. This makes the browser check first.
+fetch("data.json", {cache: "no-cache"})
   .then(r => r.ok ? r.json() : Promise.reject(new Error(r.status + " " + r.statusText)))
   .then(d => {
     takeData(d);

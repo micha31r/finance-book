@@ -80,8 +80,10 @@ def _product(page_lines):
 
 
 def _period(page_lines):
-    """Statements state a closed period. Transaction lists state a start plus a
-    generation date, which sits in the footer of the last page."""
+    """Statements state a closed period. A Transaction List states the day it
+    commences and, in the footer of its last page, the day it was generated.
+    That day bounds the year of every row; the list's period ends with its
+    last row, which parse sets once the rows are read."""
     start = end = None
     for _, items in page_lines:
         text = " ".join(t for _, _, t in items)
@@ -106,7 +108,7 @@ def parse(path) -> list[Document]:
     start, end, provisional = _period([ln for page in pages for ln in page])
     product = _product(pages[0])
 
-    if start is None or end is None:
+    if start is None:
         raise ValueError(f"{path.name}: could not read the statement period")
 
     transactions = []
@@ -127,6 +129,10 @@ def parse(path) -> list[Document]:
 
     for txn in transactions:
         _enrich(txn)
+    if provisional:
+        # A list ends with its last row, not with the day it was generated:
+        # the same list downloaded again a day later was a second document.
+        end = max((t.date for t in transactions), default=start)
 
     # Savings accounts label this "Interest Earned"; older ones say
     # "Total Interest Paid". Both mean the same thing.
@@ -139,9 +145,9 @@ def parse(path) -> list[Document]:
         account_name=meta.get("Account Name"),
         product=product,
         period_start=start, period_end=end,
-        # A Transaction List has no period of its own: its end date is the day
-        # it was generated. Saying so stops the stale sweep deleting rows that
-        # a shorter, later list simply did not cover.
+        # A Transaction List has no period of its own: its end is only its
+        # last row. Saying so stops the stale sweep deleting rows that a
+        # shorter, later list simply did not cover.
         derived_period=provisional,
         opening_balance=cents(meta["Opening Balance"]) if "Opening Balance" in meta else None,
         closing_balance=cents(meta["Closing Balance"]) if "Closing Balance" in meta else None,

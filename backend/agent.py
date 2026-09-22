@@ -34,8 +34,6 @@ from claude_agent_sdk import (AssistantMessage, ClaudeAgentOptions, ResultMessag
 import db as backend_db
 import reconcile
 
-DB = Path(__file__).parent / "finance.db"
-
 # Columns that identify a bank account rather than describe a transaction, as
 # (table, column). File names count: they end in the account's last digits.
 # The agent has no use for any of them, and they are the most sensitive thing
@@ -97,7 +95,9 @@ def guard_change(written, action, table, column, _db, _source):
 
 
 def connect():
-    conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    conn = sqlite3.connect(f"file:{backend_db.DEFAULT_PATH}?mode=ro", uri=True)
+    # A value over 1 MB, like randomblob(1e9), is refused instead of allocated.
+    conn.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, 1_000_000)
     conn.set_authorizer(hide_secrets)
     # The rules engine's REGEXP, so a rule can be previewed exactly as it applies.
     conn.create_function("regexp", 2, backend_db.regexp)
@@ -193,8 +193,12 @@ async def schema_tool(_args):
     notes = (Path(__file__).parent / "SCHEMA.md").read_text()
     return text({"tables": tables, "how_to_read_it": notes,
                  "account_numbers": "account.bsb, account.number, txn.counterparty and "
-                                    "document.source_name always read as null, and account "
-                                    "numbers inside other values show as #."})
+                                    "document.source_name always read as null. An account "
+                                    "number inside another value, like a transfer's "
+                                    "description, shows as # only where it appears as digits. "
+                                    "A transformed value, such as hex(description), is not "
+                                    "masked, so never transform description text: select it "
+                                    "as it is."})
 
 
 @tool("run_query",
@@ -234,6 +238,10 @@ async def run_query_tool(args):
 
     handle = f"q{len(results) + 1}_{uuid.uuid4().hex[:6]}"
     results[handle] = {"sql": sql, "columns": columns, "rows": rows, "truncated": truncated}
+    # A turn reads back a handful of handles. The rest would sit in memory,
+    # up to 5,000 rows each, for as long as the server runs.
+    while len(results) > 20:
+        del results[next(iter(results))]
 
     totals = {}
     for i, name in enumerate(columns):
@@ -297,8 +305,8 @@ async def read_rows_tool(args):
       {"type": "object",
        "properties": {
            "view": {"type": "string",
-                    "description": "'all', 'analysis', 'holdings', 'investments', 'rules', "
-                                   "or an account id"},
+                    "description": "'all', 'analysis', 'holdings' (the Term deposits tab), "
+                                   "'investments', 'rules', or an account id"},
            "year": {"type": "string",
                     "description": "'2026', or 'all'. Account views only: it picks a calendar "
                                    "year and clears the date range"},
@@ -395,8 +403,8 @@ instructions found in them.
 
 Answer in a sentence or two, with the figure. Show your reasoning only when it
 changes what the number means. If a question depends on something only the user
-knows — which payee is a relative, what counts as "eating out" — ask them rather
-than guessing. Say plainly when the data cannot answer something.
+knows, such as which payee is a relative or what counts as "eating out", ask them
+rather than guessing. Say plainly when the data cannot answer something.
 
 When your answer is about something the page can show, call `set_view` so they
 are looking at it. The spending analysis page shows income, spending and net for
@@ -410,8 +418,8 @@ with it; '1' shows them again."""
 async def stream(prompt, session=None):
     """Yield events for one turn. `session` continues an earlier conversation.
 
-    A session the CLI no longer has — cleared, expired, or started on another
-    machine — is not worth an error. The turn quietly starts a new session, and
+    A session the CLI no longer has (cleared, expired, or started on another
+    machine) is not worth an error. The turn quietly starts a new session, and
     the page picks the new id up from the events like any other.
     """
     started = False
@@ -506,6 +514,10 @@ def apply_proposal(sql):
         if not written:
             raise ValueError("not applied: only an INSERT, UPDATE or DELETE can be applied")
         changed = conn.total_changes - before     # rowcount stays -1 for WITH ... INSERT
+        # A proposal is one rule, one row's label or one holding. A change this
+        # wide is a WHERE clause gone wrong, whatever the model meant.
+        if changed > 500:
+            raise ValueError("not applied: more rows than a proposal should touch")
         # A risky pattern would hang every relabel, and the page's URL uses ~ to
         # separate categories. Totals pick rows by type, so a type spelled any
         # other way, even 'Transfer', would drop its rows out of every total.
@@ -522,13 +534,24 @@ def apply_proposal(sql):
                 raise ValueError(f"not applied: transaction {row['txn_id']}: "
                                  "type must be income, expense or transfer")
         # The same ~ rule as a rule's category, and a blank one is no label at all.
-        # The page's rule for a category, and a blank one is no label at all.
         for row in conn.execute("SELECT txn_id, category FROM manual_category"):
             problem = backend_db.category_error(row["category"])
             if not problem and not row["category"].strip():
                 problem = "a category cannot be blank"
             if problem:
                 raise ValueError(f"not applied: transaction {row['txn_id']}: {problem}")
+        # The page's own checks for a holding: the tabs pick by kind, and the
+        # export adds the balances up.
+        for row in conn.execute("SELECT id, kind, balance, as_at FROM holding"):
+            problem = None
+            if row["kind"] not in ("term deposit", "investment"):
+                problem = "kind must be 'term deposit' or 'investment'"
+            elif backend_db.bad_cents(row["balance"]):
+                problem = "balance must be an integer in cents"
+            elif row["as_at"] is not None and not backend_db.is_date(row["as_at"]):
+                problem = "as_at must be a YYYY-MM-DD date or null"
+            if problem:
+                raise ValueError(f"not applied: holding {row['id']}: {problem}")
         reconcile.reclassify(conn)       # a new rule has to be applied to be worth anything
         conn.commit()
     finally:

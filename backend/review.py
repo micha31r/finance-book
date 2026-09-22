@@ -5,6 +5,7 @@ Transfers inside one bank pair exactly on a shared reference. Between banks
 there is no shared key, so these are proposals. Money is only excluded from
 income and spending once you say yes.
 """
+import argparse
 import sys
 
 import db
@@ -20,6 +21,8 @@ def describe(row):
 
 
 def main():
+    argparse.ArgumentParser(description=__doc__,
+                            formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     conn = db.connect()
     candidates = reconcile.transfer_candidates(conn, reconcile.owner_aliases(conn))
     if not candidates:
@@ -33,13 +36,14 @@ def main():
         print(f"[{i}] {describe(credit)}")
         print(f"  ~ {describe(debit)}")
         print(f"    exact amount, {days} day(s) apart")
-        choice = input("    [y] link  [n] keep as income  [s] skip > ").strip().lower()
+        try:
+            choice = input("    [y] link  [n] keep as income  [s] skip > ").strip().lower()
+        except EOFError:
+            choice = "s"        # no terminal, or the input closed
         if choice == "y":
             conn.execute(
                 "INSERT OR IGNORE INTO transfer(from_txn_id, to_txn_id, method, confirmed)"
                 " VALUES (?,?,'cross-bank',1)", (debit["id"], credit["id"]))
-            conn.execute("UPDATE txn SET type = 'transfer' WHERE id IN (?,?)",
-                         (debit["id"], credit["id"]))
             linked += 1
         elif choice == "n":
             # Remember the decision so the same pair is not proposed again.

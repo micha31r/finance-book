@@ -20,19 +20,16 @@ import reconcile
 from parsers.shared.money import money_str
 
 BIG = 100_000        # cents. Below this, a stray row barely moves a total.
+# Every listing shows the same columns. A WHERE clause follows.
+ROWS = ("SELECT t.id, t.date, t.amount, t.type, t.description, a.number, b.name bank"
+        " FROM txn t JOIN account a ON a.id=t.account_id JOIN bank b ON b.id=a.bank_id WHERE ")
 
 
 def rows_matching(conn, pattern, ids):
     if ids:
         marks = ",".join("?" * len(ids))
-        return conn.execute(
-            f"SELECT t.id, t.date, t.amount, t.type, t.description, a.number, b.name bank"
-            f" FROM txn t JOIN account a ON a.id=t.account_id JOIN bank b ON b.id=a.bank_id"
-            f" WHERE t.id IN ({marks}) ORDER BY t.date", ids).fetchall()
-    return conn.execute(
-        "SELECT t.id, t.date, t.amount, t.type, t.description, a.number, b.name bank"
-        " FROM txn t JOIN account a ON a.id=t.account_id JOIN bank b ON b.id=a.bank_id"
-        " WHERE t.description LIKE ? ORDER BY t.date", (pattern,)).fetchall()
+        return conn.execute(f"{ROWS}t.id IN ({marks}) ORDER BY t.date", ids).fetchall()
+    return conn.execute(f"{ROWS}t.description LIKE ? ORDER BY t.date", (pattern,)).fetchall()
 
 
 def show(rows):
@@ -51,18 +48,16 @@ def main():
         p = sub.add_parser(name)
         if name == "set":
             p.add_argument("type", choices=db.TYPES)
+            p.add_argument("--note")
         p.add_argument("--like", help="SQL LIKE pattern against the description")
         p.add_argument("--id", nargs="+", type=int)
-        p.add_argument("--note")
 
     args = parser.parse_args()
     conn = db.connect()
 
     if args.command == "list":
         rows = conn.execute(
-            "SELECT t.id, t.date, t.amount, t.type, t.description, a.number, b.name bank"
-            " FROM txn t JOIN account a ON a.id=t.account_id JOIN bank b ON b.id=a.bank_id"
-            " WHERE t.type IN ('income','expense') AND ABS(t.amount) >= ?"
+            f"{ROWS}t.type IN ('income','expense') AND ABS(t.amount) >= ?"
             "   AND t.id NOT IN (SELECT txn_id FROM manual_type)"
             "   AND t.whatif = 0"                    # a plan is not a movement to explain
             " ORDER BY ABS(t.amount) DESC", (args.min,)).fetchall()
@@ -81,6 +76,14 @@ def main():
     print(f"{len(rows)} transactions:")
     show(rows)
 
+    if args.command == "set" and args.type != "transfer":
+        # The sign says which way the money went. Money out called income
+        # would count as earned, so the type has to agree with it.
+        wrong = [r for r in rows if (r["amount"] < 0 if args.type == "income" else r["amount"] > 0)]
+        if wrong:
+            print(f"\nrefused: income is money in and expense is money out,"
+                  f" and {len(wrong)} of these rows go the other way")
+            return 1
     if args.command == "set":
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         conn.executemany(

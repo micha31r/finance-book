@@ -6,6 +6,8 @@ one deposit is salary and another is your parents sending money. A rule matches
 a regular expression against the description and attaches a category.
 
     python rules.py list
+    python rules.py seed                     the starting rules, run once
+    python rules.py todo                     merchants no rule matches yet
     python rules.py add "family" "INTL PAYMENT FROM (FIRST NAME|SECOND NAME)"
     python rules.py test "FIRST NAME"        what would this match
     python rules.py set 32 --pattern "..."   correct one, keeping its place
@@ -51,8 +53,7 @@ def main():
     todo = sub.add_parser("todo")
     todo.add_argument("--min", type=int, default=1, help="only merchants seen this often")
     todo.add_argument("--limit", type=int, default=40)
-    sub.add_parser("seed").add_argument("--replace", action="store_true",
-                                        help="rewrite the seeded rules from category_seed.py")
+    sub.add_parser("seed")
     add = sub.add_parser("add")
     add.add_argument("category")
     add.add_argument("pattern")
@@ -101,7 +102,8 @@ def main():
                              " AND whatif = 0").fetchone()[0]
         done = conn.execute("SELECT COUNT(*) FROM txn WHERE type != 'transfer'"
                             " AND category IS NOT NULL AND whatif = 0").fetchone()[0]
-        print(f"{done}/{total} income and spending rows categorised ({100 * done / total:.0f}%)")
+        print(f"{done}/{total} income and spending rows categorised"
+              f" ({100 * done / (total or 1):.0f}%)")
         print(f"{len(items)} merchants and payers still unlabelled, {sum(v for _, v in items)} rows\n")
         for name, seen in items[:args.limit]:
             print(f"  {seen:4d}  {name}")
@@ -113,21 +115,6 @@ def main():
         from category_seed import SEED
         # An entry is (category, pattern) or (category, pattern, type).
         entries = [(e[0], e[1], e[2] if len(e) > 2 else None) for e in SEED]
-        if args.replace:
-            # Rewrite the seeded rules in place, in the file's order. Deleting
-            # and re-adding them would move every one after your own rules,
-            # where a broad one like Paying people would override yours.
-            others = {r["pattern"] for r in conn.execute(
-                "SELECT pattern FROM rule WHERE note IS NOT 'seed'")}
-            entries = [e for e in entries if e[1] not in others]
-            ids = [r["id"] for r in conn.execute(
-                "SELECT id FROM rule WHERE note = 'seed' ORDER BY id")]
-            kept = ids[:len(entries)]
-            conn.executemany("UPDATE rule SET category = ?, pattern = ?, type = ? WHERE id = ?",
-                             [(*entry, rule_id) for rule_id, entry in zip(kept, entries)])
-            conn.executemany("DELETE FROM rule WHERE id = ?", [(i,) for i in ids[len(kept):]])
-            entries = entries[len(kept):]
-            print(f"rewrote {len(kept)} seeded rules in place")
         now = datetime.now(timezone.utc).isoformat(timespec="seconds")
         existing = {r["pattern"] for r in conn.execute("SELECT pattern FROM rule")}
         added = [(p, c, t, "seed", now) for c, p, t in entries if p not in existing]

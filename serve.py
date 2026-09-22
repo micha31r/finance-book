@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Export the database and serve the frontend.
 
-    .venv/bin/python serve.py [port]
-
 Exports fresh JSON from backend/finance.db every time it starts, so the page
 never shows stale numbers, then serves frontend/ on localhost.
 """
+import argparse
 import calendar
 import http.server
 import json
@@ -21,7 +20,6 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent
-PYTHON = ROOT / ".venv" / "bin" / "python"
 
 # The backend's modules import each other by bare name, so their folder goes
 # on the path once, before any of them is imported.
@@ -35,17 +33,6 @@ MAX_BODY = 1_000_000
 # Two saves close together each rebuild data.json. Run one export at a time, so
 # the file left on disk always comes from the newest database.
 EXPORT_LOCK = threading.Lock()
-
-
-def apply_rules_now():
-    """Relabel every transaction, so an added or deleted rule takes effect."""
-    conn = backend_db.connect()
-    # reclassify rebuilds types as well as categories, so deleting a rule that
-    # set a type puts its rows back.
-    reconcile.reclassify(conn)
-    conn.commit()
-    conn.close()
-
 
 # How far apart the rows of a repeating plan sit: days, or calendar months.
 STEP_DAYS = {"weekly": 7, "fortnightly": 14}
@@ -95,6 +82,17 @@ def misdated(conn, account, day):
     return None
 
 
+def sign_error(kind, amount):
+    """Why a type you chose cannot go with the amount, or None.
+
+    Totals pick rows by type, so income marked on money out would be added as
+    money in. 'automatic', 'transfer' and no type at all fit either sign.
+    """
+    if kind == "expense" and amount > 0 or kind == "income" and amount < 0:
+        return "an expense is negative and income positive"
+    return None
+
+
 def series_ids(conn, row):
     """The row's id, or every id in its repeating plan."""
     if not row["series"]:
@@ -121,11 +119,9 @@ def add_txn(conn, item):
         return {"error": "amount must be a non-zero integer in cents"}
     if kind not in TYPES:
         return {"error": "type must be automatic, income, expense or transfer"}
-    if kind == "expense" and amount > 0 or kind == "income" and amount < 0:
-        return {"error": "an expense is negative and income positive"}
     if category is None:
         category = ""
-    problem = backend_db.category_error(category)
+    problem = sign_error(kind, amount) or backend_db.category_error(category)
     if problem:
         return {"error": problem}
     if not isinstance(whatif, bool):
@@ -138,9 +134,12 @@ def add_txn(conn, item):
         if not backend_db.is_date(until) or not start <= date.fromisoformat(until) <= months_later(start, 120):
             return {"error": "until must be a date from the first row's date to ten years after it"}
         days = series_dates(start, repeat, date.fromisoformat(until))
-    problem = None if whatif else misdated(conn, account, day)
-    if problem:
-        return {"error": problem}
+    if not whatif:
+        # The days climb, so the first and the last bound every row: a series
+        # that runs past today is a plan, however it starts.
+        problem = misdated(conn, account, day) or misdated(conn, account, days[-1].isoformat())
+        if problem:
+            return {"error": problem}
 
     ids = [backend_db.add_manual(conn, account, d.isoformat(), description.strip(), amount, whatif)
            for d in days]
@@ -171,14 +170,13 @@ def edit_txn(conn, txn_id, item):
     if len(item) != 1:
         return {"error": "send exactly one field to change"}
     field, value = next(iter(item.items()))
-    if field == "whatif":
-        return {"error": "the what-if tag cannot be changed"}
     if field not in ("description", "type", "category", "date", "amount"):
         return {"error": "only description, type, category, date and amount can be changed"}
     row = conn.execute(
         "SELECT t.id, t.account_id, t.series, t.amount, t.match_key, t.whatif,"
-        " d.kind = 'manual' AS manual FROM txn t JOIN document d ON d.id = t.document_id"
-        " WHERE t.id = ?", (txn_id,)).fetchone()
+        " d.kind = 'manual' AS manual, m.type AS manual_type"
+        " FROM txn t JOIN document d ON d.id = t.document_id"
+        " LEFT JOIN manual_type m ON m.txn_id = t.id WHERE t.id = ?", (txn_id,)).fetchone()
     if row is None:
         return {"error": "no such transaction"}
     if field in ("date", "amount") and not row["manual"]:
@@ -201,6 +199,10 @@ def edit_txn(conn, txn_id, item):
     elif field == "type":
         if value not in TYPES:
             return {"error": "type must be automatic, income, expense or transfer"}
+        # Every row of a series has the same amount, so one row's sign speaks for all.
+        problem = sign_error(value, row["amount"])
+        if problem:
+            return {"error": problem}
         if value == "automatic":
             conn.execute(f"DELETE FROM manual_type WHERE txn_id IN ({marks})", targets)
         else:
@@ -233,6 +235,10 @@ def edit_txn(conn, txn_id, item):
     else:
         if backend_db.bad_cents(value) or value == 0:
             return {"error": "amount must be a non-zero integer in cents"}
+        # A type you chose stays, so the new amount has to fit it.
+        problem = sign_error(row["manual_type"], value)
+        if problem:
+            return {"error": problem}
         # The amount is part of each row's key, so each takes the next occurrence there.
         for target in conn.execute(f"SELECT id, date, match_key FROM txn WHERE id IN ({marks})",
                                    targets).fetchall():
@@ -277,11 +283,127 @@ def delete_txn(conn, txn_id):
     return {"deleted": len(targets)}
 
 
-def main():
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
-    python = str(PYTHON) if PYTHON.exists() else sys.executable
+def holdings(conn):
+    """Every holding, which the Term deposits and Investments tabs draw from."""
+    return [dict(r) for r in conn.execute(
+        "SELECT id, kind, name, institution, balance, as_at, note FROM holding"
+        " ORDER BY kind, name")]
 
-    result = subprocess.run([python, "export.py"], cwd=ROOT / "backend")
+
+def add_holding(conn, item):
+    """Insert a holding, or change the one whose id is given.
+
+    Returns every holding, or {"error": why} with nothing written.
+    """
+    name, institution, note = item.get("name"), item.get("institution"), item.get("note")
+    balance, as_at, holding_id = item.get("balance"), item.get("as_at"), item.get("id")
+    # JSON can send a list or an object where text belongs, and SQLite can't store those.
+    if not isinstance(name, str) or any(
+            value is not None and not isinstance(value, str) for value in (institution, note)):
+        return {"error": "name, institution and note must be text"}
+    name = name.strip()
+    if not 1 <= len(name) <= 100 or len(institution or "") > 100 or len(note or "") > 500:
+        return {"error": "name must be 1 to 100 characters, institution at most 100 and note 500"}
+    if backend_db.bad_cents(balance):
+        return {"error": "balance must be an integer in cents"}
+    if as_at is not None and not backend_db.is_date(as_at):
+        return {"error": "as_at must be a YYYY-MM-DD date or null"}
+    kind = item.get("kind") or "term deposit"
+    if kind not in ("term deposit", "investment"):
+        return {"error": "kind must be 'term deposit' or 'investment'"}
+    if holding_id is not None and type(holding_id) is not int:
+        return {"error": "id must be an integer"}
+    values = (kind, name, institution, balance, as_at)
+    if holding_id is None:
+        conn.execute("INSERT INTO holding(kind, name, institution, balance, as_at, note)"
+                     " VALUES (?,?,?,?,?,?)", values + (note,))
+    else:
+        if not conn.execute("UPDATE holding SET kind=?, name=?, institution=?, balance=?, as_at=?"
+                            " WHERE id=?", values + (holding_id,)).rowcount:
+            return {"error": "no such holding"}
+        # The page's form has no note field, so an edit from it keeps the note.
+        if "note" in item:
+            conn.execute("UPDATE holding SET note=? WHERE id=?", (note, holding_id))
+    conn.commit()
+    return holdings(conn)
+
+
+def delete_holding(conn, holding_id):
+    """Delete a holding. Returns every holding left, or {"error": why}."""
+    # SQLite would read "1e3" as 1000; a path holds a row id or nothing.
+    if not str(holding_id).isdecimal() or not conn.execute(
+            "DELETE FROM holding WHERE id = ?", (holding_id,)).rowcount:
+        return {"error": "no such holding"}
+    conn.commit()
+    return holdings(conn)
+
+
+def rules(conn, hits=False):
+    """Every rule, with how many real rows each matches when `hits` is set.
+
+    Counting runs every pattern over every row, nearly two seconds. A change
+    answers without the counts: the page reloads and asks GET /api/rules for
+    them once. What-ifs are left out, as rules.py leaves them out.
+    """
+    if not hits:
+        return [dict(r) for r in conn.execute("SELECT id, pattern, category FROM rule ORDER BY id")]
+    return [dict(r) for r in conn.execute(
+        "SELECT r.id, r.pattern, r.category, (SELECT COUNT(*) FROM txn"
+        " WHERE whatif = 0 AND description REGEXP r.pattern) AS matches"
+        " FROM rule r ORDER BY r.id")]
+
+
+def add_rule(conn, item):
+    """Insert a rule and relabel every transaction by it.
+
+    Returns every rule, or {"error": why} with nothing written.
+    """
+    pattern, category, note = item.get("pattern") or "", item.get("category") or "", item.get("note")
+    # As with holdings, a list or an object can arrive where text belongs.
+    if not isinstance(pattern, str) or not isinstance(category, str) \
+            or note is not None and not isinstance(note, str):
+        return {"error": "pattern, category and note must be text"}
+    pattern, category = pattern.strip(), category.strip()
+    if not pattern or not category:
+        return {"error": "pattern and category required"}
+    if len(pattern) > 500 or len(note or "") > 500:
+        return {"error": "pattern and note are at most 500 characters"}
+    # risky_pattern also refuses an invalid pattern. A risky one, like
+    # (\w+ ?)+, can run for hours, so it is never saved.
+    problem = backend_db.risky_pattern(pattern) or backend_db.category_error(category)
+    if problem:
+        return {"error": problem}
+    conn.execute("INSERT INTO rule(pattern, category, note, created_at) VALUES (?,?,?,?)",
+                 (pattern, category, note,
+                  datetime.now(timezone.utc).isoformat(timespec="seconds")))
+    # In the same transaction, so the rule and its labels land together or not
+    # at all. reclassify rebuilds types as well as categories, so a rule that
+    # sets a type takes effect now, and deleting one puts its rows back.
+    reconcile.reclassify(conn)
+    conn.commit()
+    return rules(conn)
+
+
+def delete_rule(conn, rule_id):
+    """Delete a rule and relabel its rows by the rules that remain.
+
+    Returns every rule left, or {"error": why} with nothing written.
+    """
+    if not str(rule_id).isdecimal() or not conn.execute(
+            "DELETE FROM rule WHERE id = ?", (rule_id,)).rowcount:
+        return {"error": "no such rule"}
+    reconcile.reclassify(conn)
+    conn.commit()
+    return rules(conn)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("port", nargs="?", type=int, default=8000, help="default 8000")
+    port = parser.parse_args().port
+
+    result = subprocess.run([sys.executable, "export.py"], cwd=ROOT / "backend")
     # 3 means data.json was written with a warning, which export printed above.
     if result.returncode not in (0, 3):
         print("export failed, not serving")
@@ -308,13 +430,23 @@ turns = {}
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
     """Serves the page, plus a small API for the few things it can change.
 
-    Holdings are things no statement covers, like a term deposit or a
-    Sharesies balance. They have to be typed in. Rules relabel transactions.
-    Transactions typed in on the page, real ones and what-ifs, can be added,
-    changed and deleted. A bank row can be renamed, retyped and given a
-    category, but its date and amount are the bank's, and it stays. And
-    /api/apply runs a change the agent proposed and you approved, to a rule,
-    a manual type or category, or a holding.
+        GET    /api/rules           every rule with its hit count
+        POST   /api/holdings        add a holding, or change the one whose id is sent
+        DELETE /api/holdings/<id>   delete a holding
+        POST   /api/rules           add a rule and relabel every row
+        DELETE /api/rules/<id>      delete a rule and relabel every row
+        POST   /api/txn             add a row entered by hand, or a repeating series
+        POST   /api/txn/<id>        change one field of a row, and of its series
+        DELETE /api/txn/<id>        delete a row entered by hand, with its series
+        POST   /api/chat            one turn of the agent, as server-sent events
+        POST   /api/stop            cancel a turn
+        POST   /api/apply           run a change the agent proposed and you approved
+
+    A holding is money no statement covers, like a term deposit or a Sharesies
+    balance, so it is typed in. A bank row can be renamed, retyped and given a
+    category, but its date and amount are the bank's, and it stays. A change
+    the agent proposed is to a rule, a manual type or category, or a holding.
+    Every write rebuilds data.json before it answers, so a reload shows it.
     """
 
     # Seconds one read or write on the socket may block. Without it, a request
@@ -337,55 +469,37 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         A POST or DELETE must come from this page. Browsers send Origin with
         every cross-site one, even when that site cannot read the answer.
 
+        Another site cannot read an /api/ answer either, but the server would
+        still do the work, and GET /api/rules runs every pattern over every
+        row. Browsers say where a request came from in Sec-Fetch-Site:
+        same-origin is this page and none is the address bar. Any other
+        sender is refused.
+
         A POST must also be JSON. Another site cannot send JSON without a CORS
         preflight, and this server never answers one.
         """
         if not super().parse_request():
             return False
         port = self.server.server_port
-        if self.headers.get("Host") not in (f"localhost:{port}", f"127.0.0.1:{port}"):
+        # A browser leaves the port off the Host and Origin when it is the default.
+        hosts = [f"localhost:{port}", f"127.0.0.1:{port}"]
+        if port == 80:
+            hosts += ["localhost", "127.0.0.1"]
+        if self.headers.get("Host") not in hosts:
             self._send({"error": f"open http://localhost:{port}/ instead"}, 403)
             return False
-        origins = (f"http://localhost:{port}", f"http://127.0.0.1:{port}")
         if (self.command in ("POST", "DELETE") and "Origin" in self.headers
-                and self.headers["Origin"] not in origins):
+                and self.headers["Origin"] not in [f"http://{host}" for host in hosts]):
+            self._send({"error": "requests from other sites are refused"}, 403)
+            return False
+        site = self.headers.get("Sec-Fetch-Site", "same-origin")
+        if urlsplit(self.path).path.startswith("/api/") and site not in ("same-origin", "none"):
             self._send({"error": "requests from other sites are refused"}, 403)
             return False
         if self.command == "POST" and self.headers.get_content_type() != "application/json":
             self._send({"error": "Content-Type must be application/json"}, 415)
             return False
         return True
-
-    def end_headers(self):
-        # data.json is rewritten after every change, but on a reload the browser
-        # may reuse its cached copy, for hours if the file was old when fetched.
-        # no-cache makes it check first. A malformed request has no path, so
-        # the command is tested before it.
-        if self.command == "GET" and urlsplit(self.path).path == "/data.json":
-            self.send_header("Cache-Control", "no-cache")
-        super().end_headers()
-
-    def _query(self, sql):
-        # db.connect, for its REGEXP that never runs a pattern that could hang.
-        conn = backend_db.connect()
-        rows = [dict(r) for r in conn.execute(sql)]
-        conn.close()
-        return rows
-
-    def _rules(self, hits=True):
-        # Counting hits runs every pattern over every row, nearly two seconds.
-        # A change answers without them: the page reloads and asks GET
-        # /api/rules for the counts once.
-        if not hits:
-            return self._query("SELECT id, pattern, category FROM rule ORDER BY id")
-        return self._query(
-            "SELECT r.id, r.pattern, r.category,"
-            " (SELECT COUNT(*) FROM txn WHERE description REGEXP r.pattern) AS matches"
-            " FROM rule r ORDER BY r.id")
-
-    def _holdings(self):
-        return self._query("SELECT id, kind, name, institution, balance, as_at, note"
-                           " FROM holding ORDER BY kind, name")
 
     def _send(self, payload, status=200):
         body = json.dumps(payload).encode()
@@ -414,11 +528,12 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             return None
         return item
 
-    def _txn(self, change, *args):
-        """Run one change to the transactions, then rebuild data.json for it.
+    def _write(self, change, *args):
+        """Run one change to the database, then rebuild data.json for it.
 
         BEGIN IMMEDIATE takes the write lock before the change reads anything,
-        so two adds at once cannot pick the same occurrence. The change commits
+        so two adds at once cannot pick the same occurrence, and a rule and
+        the relabel it causes land together or not at all. The change commits
         itself when it goes through. Closing without a commit throws a refused
         or failed one away, so nothing half-done is kept.
         """
@@ -431,8 +546,10 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             return self._send({"error": f"not saved: {error}"}, 500)
         finally:
             conn.close()
-        if "error" in result:
-            return self._send(result, 400)
+        # Holdings and rules answer with their whole table, a list. A refusal
+        # is a dict: 404 for a row that is not there, 400 for bad input.
+        if isinstance(result, dict) and "error" in result:
+            return self._send(result, 404 if result["error"].startswith("no such") else 400)
         return self._rebuild_then_send(result)
 
     def _rebuild_then_send(self, payload):
@@ -446,9 +563,8 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         with a printed one. The save still worked, so that warning goes to the
         terminal and the page gets its answer.
         """
-        python = str(PYTHON) if PYTHON.exists() else sys.executable
         with EXPORT_LOCK:
-            export = subprocess.run([python, "export.py"], cwd=ROOT / "backend",
+            export = subprocess.run([sys.executable, "export.py"], cwd=ROOT / "backend",
                                     capture_output=True, text=True)
         output = (export.stdout + export.stderr).strip()
         if export.returncode == 3:
@@ -519,16 +635,21 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
                 pass
 
     def do_GET(self):
-        # Only the rules page shows hit counts, so it asks here; see _rules.
+        # Only the rules page shows hit counts, so it asks here; see rules().
         if urlsplit(self.path).path == "/api/rules":
-            return self._send(self._rules())
+            # db.connect, for its REGEXP that never runs a pattern that could hang.
+            conn = backend_db.connect()
+            try:
+                return self._send(rules(conn, hits=True))
+            finally:
+                conn.close()
         super().do_GET()
 
     def do_POST(self):
         path = urlsplit(self.path).path
         txn_id = None
         if path.startswith("/api/txn/"):                # /api/txn/<id> changes one row
-            path, txn_id = "/api/txn/", path.rsplit("/", 1)[1]
+            path, txn_id = "/api/txn/", path[len("/api/txn/"):]
         if path not in ("/api/holdings", "/api/rules", "/api/chat", "/api/apply", "/api/stop",
                         "/api/txn", "/api/txn/"):
             return self.send_error(404)
@@ -536,9 +657,13 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         if item is None:
             return
         if path == "/api/txn":
-            return self._txn(add_txn, item)
+            return self._write(add_txn, item)
         if path == "/api/txn/":
-            return self._txn(edit_txn, txn_id, item)
+            return self._write(edit_txn, txn_id, item)
+        if path == "/api/holdings":
+            return self._write(add_holding, item)
+        if path == "/api/rules":
+            return self._write(add_rule, item)
         if path == "/api/chat":
             return self._chat(item)
         if path == "/api/stop":
@@ -553,88 +678,19 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
             except RuntimeError:
                 return self._send({"stopped": False})      # finished in the moment between
             return self._send({"stopped": True})
-        if path == "/api/apply":
-            try:
-                import agent                   # inside the try: it fails without the agent SDK
-                changed = agent.apply_proposal(item.get("sql", ""))
-            except Exception as error:
-                return self._send({"error": str(error)}, 400)
-            return self._rebuild_then_send({"changed": changed, "rules": self._rules(hits=False)})
-        if path == "/api/rules":
-            return self._add_rule(item)
-        balance, as_at = item.get("balance"), item.get("as_at")
-        if not item.get("name") or backend_db.bad_cents(balance):
-            return self._send({"error": "name and integer balance in cents required"}, 400)
-        # JSON can send a list or an object where text belongs, and SQLite can't store those.
-        if not isinstance(item["name"], str) or any(
-                item.get(key) is not None and not isinstance(item[key], str)
-                for key in ("institution", "note")):
-            return self._send({"error": "name, institution and note must be text"}, 400)
-        if item.get("id") is not None and type(item["id"]) is not int:
-            return self._send({"error": "id must be an integer"}, 400)
-        if as_at is not None and not backend_db.is_date(as_at):
-            return self._send({"error": "as_at must be a YYYY-MM-DD date or null"}, 400)
-        kind = item.get("kind") or "term deposit"
-        if kind not in ("term deposit", "investment"):
-            return self._send({"error": "kind must be 'term deposit' or 'investment'"}, 400)
-        conn = backend_db.connect()
-        values = (kind, item["name"], item.get("institution"), balance, as_at)
-        if item.get("id"):
-            conn.execute("UPDATE holding SET kind=?, name=?, institution=?, balance=?, as_at=?"
-                         " WHERE id=?", values + (item["id"],))
-            # The page's form has no note field, so an edit from it keeps the note.
-            if "note" in item:
-                conn.execute("UPDATE holding SET note=? WHERE id=?", (item["note"], item["id"]))
-        else:
-            conn.execute("INSERT INTO holding(kind, name, institution, balance, as_at, note)"
-                         " VALUES (?,?,?,?,?,?)", values + (item.get("note"),))
-        conn.commit()
-        conn.close()
-        return self._rebuild_then_send(self._holdings())
-
-    def _add_rule(self, item):
-        pattern, category, note = item.get("pattern") or "", item.get("category") or "", item.get("note")
-        # As with holdings, a list or an object can arrive where text belongs.
-        if not isinstance(pattern, str) or not isinstance(category, str) \
-                or note is not None and not isinstance(note, str):
-            return self._send({"error": "pattern, category and note must be text"}, 400)
-        pattern, category = pattern.strip(), category.strip()
-        if not pattern or not category:
-            return self._send({"error": "pattern and category required"}, 400)
-        # risky_pattern also refuses an invalid pattern. A risky one, like
-        # (\w+ ?)+, can run for hours, so it is never saved.
-        problem = backend_db.risky_pattern(pattern)
-        if problem:
-            return self._send({"error": problem}, 400)
-        problem = backend_db.category_error(category)
-        if problem:
-            return self._send({"error": problem}, 400)
-        conn = backend_db.connect()
-        conn.execute("INSERT INTO rule(pattern, category, note, created_at) VALUES (?,?,?,?)",
-                     (pattern, category, note,
-                      datetime.now(timezone.utc).isoformat(timespec="seconds")))
-        conn.commit()
-        conn.close()
-        apply_rules_now()
-        return self._rebuild_then_send(self._rules(hits=False))
+        try:
+            import agent                   # inside the try: it fails without the agent SDK
+            changed = agent.apply_proposal(item.get("sql", ""))
+        except Exception as error:
+            return self._send({"error": str(error)}, 400)
+        return self._rebuild_then_send({"changed": changed})
 
     def do_DELETE(self):
         path = urlsplit(self.path).path
-        if path.startswith("/api/txn/"):
-            return self._txn(delete_txn, path.rsplit("/", 1)[1])
-        conn = backend_db.connect()
-        if path.startswith("/api/holdings/"):
-            conn.execute("DELETE FROM holding WHERE id = ?", (path.rsplit("/", 1)[1],))
-            conn.commit()
-            conn.close()
-            return self._rebuild_then_send(self._holdings())
-        if path.startswith("/api/rules/"):
-            conn.execute("DELETE FROM rule WHERE id = ?", (path.rsplit("/", 1)[1],))
-            conn.commit()
-            conn.close()
-            apply_rules_now()
-            return self._rebuild_then_send(self._rules(hits=False))
-        conn.close()
+        for prefix, change in (("/api/txn/", delete_txn), ("/api/holdings/", delete_holding),
+                               ("/api/rules/", delete_rule)):
+            if path.startswith(prefix):
+                return self._write(change, path[len(prefix):])
         return self.send_error(404)
 
 

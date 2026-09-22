@@ -48,7 +48,7 @@ SEED = [
 
     # ---- home ----
     # Rent is rent. The UniLodge card taps are small laundry and amenity
-    # charges: 97 of them sat in Rent and dragged its average far below any real rent.
+    # charges, and in Rent they dragged its average far below any real rent.
     ("Rent", r"ACQUIRE REAL ESTATE"),
     ("Laundry and amenities", r"UNILODGE|RESIDENT APP"),
     ("Phone and internet", r"VODAFONE|BOOST PREPAID|TELSTRA|OPTUS|AMAYSIM|BELONG"),
@@ -89,7 +89,7 @@ SEED = [
     ("Cash withdrawals", r"\bATM\b|WITHDRAWAL AT "),
     # Only wording that names an actual fee, and only where the fee IS the
     # transaction. "INC O/S FEE $0.91" appears inside every overseas purchase
-    # description, so matching it labelled 123 real purchases as bank fees.
+    # description, so matching it labelled real purchases as bank fees.
     # "INCL OVERSEAS TRANSACTION FEE $5.67" is the same trap on the other side:
     # ANZ prints it inside a whole overseas ATM withdrawal, so matching it moved
     # whole withdrawals out of Cash withdrawals and into fees.

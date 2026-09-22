@@ -5,7 +5,7 @@ no account number in it, so the account identity learned from a PDF is what
 names the CSV later.
 """
 import re
-from datetime import date
+from datetime import date, timedelta
 
 from .shared import csvfile, pdf
 from .shared.money import MONTHS, cents, is_money, resolve_year
@@ -14,8 +14,7 @@ from .shared.model import Document, Transaction
 STATEMENT_COLUMNS = ["Withdrawals", "Deposits", "Balance"]
 REPORT_COLUMNS = ["Withdrawals", "Deposits"]
 
-STATEMENT_PERIOD = re.compile(r"^(\d{1,2}) ([A-Za-z]+) (\d{4}) TO (\d{1,2}) ([A-Za-z]+) (\d{4})$", re.I)
-REPORT_PERIOD = re.compile(r"^(\d{1,2}) (\w+) (\d{4}) to (\d{1,2}) (\w+) (\d{4})$")
+PERIOD = re.compile(r"^(\d{1,2}) ([A-Za-z]+) (\d{4}) to (\d{1,2}) ([A-Za-z]+) (\d{4})$", re.I)
 STATEMENT_NO = re.compile(r"^STATEMENT NUMBER (\d+)$")
 AS_OF = re.compile(r"Balance as of (\d{1,2}) (\w{3}) (\d{4})")
 DAY_MONTH = re.compile(r"^(\d{1,2}) ([A-Z]{3})$")
@@ -82,7 +81,7 @@ def _parse_pdf(path) -> Document:
     for i, (_, items) in enumerate(pages[0]):
         texts = [t for _, _, t in items]
         text = " ".join(texts)
-        m = STATEMENT_PERIOD.match(text) or REPORT_PERIOD.match(text)
+        m = PERIOD.match(text)
         if m:
             start = date(int(m[3]), MONTHS[m[2][:3].lower()], int(m[1]))
             end = date(int(m[6]), MONTHS[m[5][:3].lower()], int(m[4]))
@@ -102,11 +101,6 @@ def _parse_pdf(path) -> Document:
             for _, _, t in pages[0][i + 1][1]:
                 if re.match(r"^\d{4}-\d{5}$|^\d{9}$", t):
                     meta.setdefault("number", t.replace("-", ""))
-        for _, _, t in items:                      # reports print both inline
-            if re.match(r"^\d{9}$", t):
-                meta.setdefault("number", t)
-            if re.match(r"^\d{6}$", t) and "bsb" not in meta and "Branch" in text:
-                meta["bsb"] = t
         m = AS_OF.search(text)
         if m:
             inline = [t for t in texts if is_money(t)]
@@ -162,6 +156,12 @@ def _parse_pdf(path) -> Document:
         _enrich(txn)
     if is_report:
         transactions.reverse()              # reports print newest first
+    # ANZ prints the previous closing day as the start, and the generation
+    # stamp shows the end day is fully included: the period begins a day later.
+    # Rows were resolved against the printed period, so one dated on the
+    # printed start day still parses and the checks report it.
+    if not is_report and meta.get("statement_no", 1) > 1:
+        start += timedelta(days=1)
 
     return Document(
         bank="ANZ",

@@ -9,8 +9,10 @@ MONTHS = {m: i + 1 for i, m in enumerate(
     ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"])}
 
 # A statement writes "... ALTAVEND MITCHAM EFFECTIVE DATE 01 MAR 2025" where the
-# CSV export writes "... ALTAVEND MITCHAM". Same transaction, two spellings.
-EFFECTIVE_SUFFIX = re.compile(r"\s+EFFECTIVE DATE \d{1,2} \w{3} \d{4}\s*$")
+# CSV export writes "... ALTAVEND MITCHAM". Same transaction, two spellings. ANZ
+# Plus writes "Effective Date 01/03/2025" on a statement's card purchases and
+# nothing on a Transaction List's.
+EFFECTIVE_SUFFIX = re.compile(r"\s+EFFECTIVE DATE (\d{1,2} \w{3} \d{4}|\d{2}/\d{2}/\d{4})\s*$")
 
 
 def is_money(token: str) -> bool:
@@ -43,9 +45,10 @@ def resolve_year(day: int, month: int, start: date, end: date,
                  after: date | None = None, before: date | None = None):
     """Statements print '31 Jul' with no year. Pick the year that lands in the period.
 
-    Periods can straddle new year (27 Dec 2023 to 27 Feb 2024), so both candidate
-    years are tried. A period of a year or more makes both valid, so the previous
-    row's date breaks the tie, because rows within a document run in date order.
+    Periods can straddle new year (27 Dec 2023 to 27 Feb 2024), so every year
+    the period touches is tried. A period of a year or more makes more than one
+    valid, so the previous row's date breaks the tie, because rows within a
+    document run in date order.
     Pass it as `after` when rows run oldest first. Pass it as `before` when they
     run newest first, and pass the period's end for the first row.
 
@@ -53,7 +56,7 @@ def resolve_year(day: int, month: int, start: date, end: date,
     a transaction's identity, so a bad guess would duplicate the row later.
     """
     candidates = []
-    for year in dict.fromkeys((start.year, end.year, end.year + 1)):
+    for year in range(start.year, end.year + 1):
         try:
             candidate = date(year, month, day)
         except ValueError:
