@@ -10,49 +10,52 @@
 <!-- No icon. Saying so stops the browser asking for one and logging a 404. -->
 <link rel="icon" href="data:,">
 <style>
-  /* Blurple on blue-grey, with zero radius, hairline rules, mono figures and
-     uppercase labels.
+  /* Near-black and neutral greys, flat fills, zero radius, bold figures, mono
+     numbers in tables and uppercase labels.
 
-     The light blurple is the signal. Positive amounts take it and negative ones
-     stay plain ink. Saturated fill is used sparingly. */
+     Surfaces are told apart by fill, not by borders: cards, panels and tables
+     sit one step lighter than the ground. Lines are left only where rows need
+     them.
+
+     In the chrome, colour always means something. White marks the current
+     item and the primary action. Green is money in, red is money out where
+     it is shown, and amber is a what-if. Everything else is grey. Categories
+     are the exception: each gets its own hue, so dozens can be told apart. */
   :root {
     color-scheme: dark;
-    --bg: #161826;          /* ground */
-    --panel: #232532;       /* surface */
-    /* Nothing in the chrome is a true grey. A neutral grey next to the
-       purple accent reads as dirt, so every line and fill carries the same
-       violet hue the accent does, just desaturated. */
-    --line: #413d55;        /* border */
-    --line-soft: #2b2740;   /* quiet fill: code, progress track */
-    --rule: #37334f;        /* table row rule, a touch brighter than the fill */
-    --hover: #322d4b;       /* row and sidebar hover */
-    --ink: #eae8f2;         /* the same violet hue, just at the top of the ramp */
-    --ink-dim: #b2b6ca;
-    --ink-faint: #9397ab;
-    --in: #b5abfc;          /* light blurple: money in, positive */
-    --out: #eae8f2;         /* money out stays plain ink */
-    --move: #9397ab;        /* transfers stay desaturated */
-    --gain: #57d68d;        /* income, in the transaction tables */
-    --loss: #f2727d;        /* spending, in the transaction tables */
-    /* Text on an accent fill is --bg, at 5.4:1. Near-white reads at only 3:1. */
-    --accent: #9184d9;      /* blurple: current item, primary action */
-    --accent-dim: #423a6a;
+    --bg: #0c0c0e;          /* ground */
+    --panel: #18181b;       /* surface: cards, panels, tables */
+    --line: #2c2c31;        /* hairline rules, where a line is still needed */
+    --line-soft: #202024;   /* progress track, chat rules */
+    --rule: #232327;        /* table row rule */
+    --hover: #26262b;       /* row hover, and the fill of a control on a surface */
+    --ink: #f4f4f5;
+    --ink-dim: #b8b8c0;
+    --ink-faint: #909099;
+    --in: #3ddc84;          /* money in, positive */
+    --out: #f4f4f5;         /* money out stays plain ink */
+    --move: #909099;        /* transfers stay grey */
+    --loss: #ff5c5c;        /* spending in the transaction tables, a negative net */
+    --plan: #f5b544;        /* a what-if: a plan you typed in, not a bank row */
+    /* Text on an accent fill is --bg. */
+    --accent: #f4f4f5;      /* current item, primary action */
+    --accent-dim: #3a3a40;  /* text selection */
     --gap: 14px;           /* one spacing step, horizontal and vertical */
     --bar: 38px;           /* the chat bar's one-line height; the page sits below it */
     --control: 22px;       /* the chat bar's Send and Stop buttons */
-    /* The one place in the app that is not the purple palette. It marks the
-       surface where you are talking to a model rather than reading your own
-       books, and it only appears while that surface has your attention. */
+    /* The only gradient in the app. It marks the surface where you are
+       talking to a model rather than reading your own books, and it only
+       appears while that surface has your attention. */
     --spectrum: linear-gradient(90deg, #b5abfc, #7cc7fb, #5eead4,
                                 #fbbf24, #f472b6, #a78bfa, #b5abfc);
     --display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
     --sans: "IBM Plex Sans", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-    scrollbar-color: var(--line) transparent;   /* the browser's own is grey */
+    scrollbar-color: var(--line) transparent;   /* a dark thumb on a clear track */
   }
   * { box-sizing: border-box; }
-  /* The browser's own tick box is a neutral grey when unticked, so every tick
-     in the app is drawn here instead. */
+  /* The browser's own tick box has round corners and ticks in the system
+     blue, so every tick in the app is drawn here instead. */
   input[type="checkbox"] {
     appearance: none; display: grid; place-content: center; flex: none;
     width: 14px; height: 14px; margin: 0; cursor: pointer;
@@ -64,7 +67,8 @@
     content: ""; width: 7px; height: 3px; margin-top: -2px; color: var(--bg);
     border: solid; border-width: 0 0 2px 2px; transform: rotate(-45deg);
   }
-  /* Other browser defaults that would draw in pure grey, white or blue. */
+  /* Other browser defaults, which draw in the system blue or a grey too dark
+     for this ground. */
   ::placeholder { color: var(--ink-faint); }
   ::selection { background: var(--accent-dim); color: var(--ink); }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -80,7 +84,8 @@
     -webkit-font-smoothing: antialiased;
   }
   h2 { font-family: var(--display); font-weight: 700; letter-spacing: -0.035em; }
-  /* Every figure and timestamp is mono, so columns lock. */
+  /* Every figure and timestamp is mono, so columns lock. The big card
+     figures are the exception: they sit alone, so they take the display font. */
   .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
   .in { color: var(--in); } .out { color: var(--out); } .move { color: var(--move); }
 
@@ -92,11 +97,11 @@
   @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
 
   /* ---------- sidebar ---------- */
-  /* Fills the window below the chat bar, so the dividing rule reaches the
-     bottom rather than stopping under the last item. Scrolls on its own if the
-     account list ever outgrows the screen. */
+  /* Fills the window below the chat bar, so the export stamp sits on the
+     bottom edge. Scrolls on its own if the account list ever outgrows the
+     screen. */
   nav {
-    padding: 18px 12px; border-right: 1px solid var(--line);
+    padding: 18px 12px;
     position: sticky; top: var(--bar); height: calc(100vh - var(--bar));
     overflow-y: auto; box-sizing: border-box;
     /* Column flex so the export stamp can sit on the bottom edge. As a page
@@ -115,34 +120,32 @@
   /* The accent fill marks the current item. */
   nav button[aria-current="true"] { background: var(--accent); color: var(--bg); }
   nav button[aria-current="true"] .name { font-weight: 500; }
-  /* Dimmed, the balance drops under 4.5:1 on the fill. */
-  nav button[aria-current="true"] .bal { opacity: 1; }
   nav button .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   nav button .bal { font-size: 12px; opacity: .75; }
 
   /* ---------- main ---------- */
   main { padding: 20px 24px 32px; min-width: 0; }
   .title { display: flex; align-items: baseline; gap: 10px; margin-bottom: var(--gap); }
-  .title h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+  .title h2 { margin: 0; font-size: 24px; letter-spacing: -0.03em; }
   .title .sub { color: var(--ink-dim); font-size: 13px; }
 
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
            gap: var(--gap); margin: var(--gap) 0; }
-  /* Surface block with a 2px rule down the left: the accent on the first card,
-     dim on the rest. */
-  .card { background: var(--panel); border-left: 2px solid var(--accent-dim); padding: 13px 16px; }
-  .cards .card:first-child { border-left-color: var(--accent); }
-  .card .v { font-family: var(--mono); font-size: 20px; font-weight: 400;
-             margin-top: 6px; letter-spacing: -0.01em; }
-  .card .note { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
-  /* The Net cards are the one place a card goes green or red. A surplus or a
-     loss is a verdict, and blurple-or-ink only says which sign it has. Zero
-     stays desaturated, like a transfer: neither. */
-  .card .v.gain { color: var(--gain); }
+  /* A flat surface block. The figure is the loudest thing on the page, in
+     bold display type. It scales with the card's width, so "+$164,795.21"
+     fits a sixth of the page and still reads large with four cards across. */
+  .card { background: var(--panel); padding: 16px 18px; container-type: inline-size; }
+  .card .v { font-family: var(--display); font-size: clamp(18px, 14cqi, 30px); font-weight: 700;
+             margin-top: 6px; letter-spacing: -0.03em; line-height: 1.2; }
+  .card .note { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin-top: 4px; }
+  /* A card that gives a verdict, Net or a cashflow balance, goes red for a
+     loss. A surplus is green like money in, and zero stays grey, like a
+     transfer: neither. */
+  .card .v.gain { color: var(--in); }
   .card .v.loss { color: var(--loss); }
   .card .v.even { color: var(--move); }
 
-  .panel { background: var(--panel); border: 1px solid var(--line); padding: 14px 16px;
+  .panel { background: var(--panel); padding: 16px 18px;
            margin-bottom: var(--gap); min-width: 0; }
   .panel > h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; }
   .panel > p  { margin: 0 0 12px; font-size: 12px; color: var(--ink-faint); }
@@ -161,18 +164,18 @@
   .years { display: flex; gap: 6px; flex-wrap: wrap; margin: var(--gap) 0; }
   /* 32px tall, like the sidebar items and every other toggle. */
   .years button {
-    border: 1px solid var(--line); background: transparent; color: var(--ink-dim);
+    border: 0; background: var(--panel); color: var(--ink-dim);
     height: 32px; padding: 0 12px; font: inherit; font-family: var(--mono); font-size: 12px; cursor: pointer;
   }
-  .years button:hover { color: var(--ink); border-color: var(--ink-faint); }
-  .years button[aria-current="true"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .years button:hover { color: var(--ink); background: var(--hover); }
+  .years button[aria-current="true"] { background: var(--accent); color: var(--bg); }
   /* From and To wear the analysis page's date input box: the `.picker label`
      rule below covers both. Only the height differs, to line them up with the
      year buttons beside them. */
   .years label { height: 32px; }
 
   /* ---------- table ---------- */
-  .tablewrap { background: var(--panel); border: 1px solid var(--line); }
+  .tablewrap { background: var(--panel); }
   /* Below this, Date, Type, Amount and Balance alone need more than the screen
      has, so let the table scroll inside its own box rather than pushing the
      whole page sideways. Only here: making this a scroll container at any
@@ -189,7 +192,7 @@
      printing its text over the sticky column headers. */
   .tcap {
     display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap;
-    padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--panel);
+    padding: 10px; background: var(--panel);
   }
   .tcap .grp { font-family: var(--display); font-weight: 500; font-size: 14px;
                letter-spacing: -0.02em; }
@@ -211,15 +214,13 @@
   .fold svg { flex: none; color: var(--ink-faint); transition: transform .15s; }
   .fold:hover svg { color: var(--ink); }
   .fold[aria-expanded="true"] svg { transform: rotate(90deg); }
-  /* The strip's own rule would double the box's border on a collapsed table. */
-  table:has(> tbody[hidden]) .tcap { border-bottom: 0; }
   /* No taller than the account name beside it, so opening the search does not
      make the strip grow. */
   .tcap .find {
     flex: 1 1 12rem; min-width: 0; max-width: 22rem;
     padding: 0 8px; font: inherit; font-size: 13px; line-height: 18px;
     color: var(--ink); background: var(--bg);
-    border: 1px solid var(--line); border-radius: 0;
+    border: 1px solid transparent; border-radius: 0;
   }
   .tcap .find:focus { outline: none; border-color: var(--accent); }
   /* Chrome's clear button is pure white. This is the same cross in a token. */
@@ -239,14 +240,14 @@
   }
   /* The whole head sticks: the caption strip with its search and add buttons,
      the add form when it is open, and the column headers. Below the chat bar,
-     and in the drill-down below its 57px header: the 30px close button, 13px
-     padding above and below, and a 1px rule. Not at 600px and under, where
+     and in the drill-down below its 56px header: the 30px close button and
+     13px padding above and below. Not at 600px and under, where
      the table scrolls in its own box and an offset would push the head down
      over the first row. */
   thead { position: sticky; top: 0; z-index: 2; }
   @media (width > 600px) {
     thead { top: var(--bar); }
-    #drill thead { top: 57px; }
+    #drill thead { top: 56px; }
   }
   /* The caption strip is the head's first row, so it sticks with the columns.
      Its cell is a td: a th would print the strip faint, in the column-header
@@ -289,15 +290,14 @@
   td.bal { white-space: nowrap; color: var(--ink-faint); font-size: 13px; }
   code {
     font: 12px/1.5 var(--mono);
-    background: var(--line-soft); border: 1px solid var(--line);
-    border-radius: 0; padding: 1px 5px;
+    background: var(--bg); border-radius: 0; padding: 1px 5px;
     /* A regex has no spaces to break at, so allow a break anywhere. Without
        this the cell cannot shrink and the other columns get squeezed away. */
     overflow-wrap: anywhere;
   }
   /* Spaces at the end of a pattern change what it matches but draw as nothing,
      so they get a fill. */
-  code .trail { white-space: pre; background: var(--accent-dim); }
+  code .trail { white-space: pre; background: var(--ink-faint); }
   /* Fixed layout keeps the narrow columns readable no matter how long the
      pattern is. Widths come from the colgroup on each table. */
   table.fixed { table-layout: fixed; }
@@ -314,29 +314,26 @@
   .tag.out { --tag: var(--out); }
   .tag.move { --tag: var(--move); }
   /* In the transaction tables money reads the way a bank statement does:
-     income green, spending red, transfers left grey because they are neither.
-     The amount, the type badge and the in/out figures in the header strip all
-     agree. The rest of the app keeps its purple, except the Net cards, which
-     take the same green and red. */
-  table.rows td.amt.in, .tcap .meta .in { color: var(--gain); }
+     spending red, where the rest of the app leaves money out plain ink.
+     The amount, the type badge and the out figure in the header strip all
+     agree. */
   table.rows td.amt.out, .tcap .meta .out { color: var(--loss); }
-  table.rows .tag.in { --tag: var(--gain); }
   table.rows .tag.out { --tag: var(--loss); }
   /* A provisional row is one the bank has not finalised. It is dimmed, and a
      tag says so; the reason is in the tag's title. */
   tr.provisional td.desc, tr.provisional td.date { color: var(--ink-faint); font-style: italic; }
-  /* A what-if is a plan you typed in, not a bank row. It wears the accent: the
+  /* A what-if is a plan you typed in, not a bank row. It wears amber: the
      tag is filled with it and the description is written in it. */
   /* No truncation: "what-if · covered" is the whole warning. */
-  .tag.whatif { --tag: var(--accent); max-width: none; }
-  tr.whatif td.desc { color: var(--accent); }
+  .tag.whatif { --tag: var(--plan); max-width: none; }
+  tr.whatif td.desc { color: var(--plan); }
 
   /* ---------- editing rows ---------- */
   /* An editor stands in for one cell, or for one tag, and keeps the row's
      height: 22px sits inside the line the text took, so nothing around it moves. */
   .editor, tr.add input, tr.add select {
     height: 22px; padding: 0 5px; font: inherit; font-size: 13px; color: var(--ink);
-    background: var(--bg); border: 1px solid var(--line); border-radius: 0;
+    background: var(--bg); border: 1px solid transparent; border-radius: 0;
     vertical-align: middle;
   }
   .editor:focus, tr.add input:focus, tr.add select:focus { outline: none; border-color: var(--accent); }
@@ -369,12 +366,12 @@
   .picker { display: flex; flex-wrap: wrap; gap: 6px; }
   .picker label, .years label {
     display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;
-    border: 1px solid var(--line); background: transparent;
-    padding: 5px 12px 5px 9px; font-size: 13px; color: var(--ink-dim);
+    background: var(--panel);
+    padding: 6px 12px 6px 9px; font-size: 13px; color: var(--ink-dim);
   }
-  .picker label:has(input:checked) { border-color: var(--accent); color: var(--ink); }
+  .picker label:has(input:checked) { color: var(--ink); }
   /* A date box is one of these labels with the input inside. The label gives
-     up its padding and the input draws no box of its own, so the outline the
+     up its padding and the input draws no box of its own, so the fill the
      other labels have is the only one it shows. */
   label:has(> input[type=date]) { padding: 0; }
   label > input[type=date] { border: 0; background: none; font: inherit; color: inherit; padding: 5px 8px; }
@@ -393,10 +390,10 @@
   .chip {
     font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
     height: 32px; padding: 0 9px; cursor: pointer; border-radius: 0;
-    border: 1px solid var(--line); background: transparent; color: var(--ink-dim);
+    border: 0; background: var(--panel); color: var(--ink-dim);
   }
-  .chip:hover { color: var(--ink); border-color: var(--ink-faint); }
-  .chip[aria-current="true"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  .chip:hover { color: var(--ink); background: var(--hover); }
+  .chip[aria-current="true"] { background: var(--accent); color: var(--bg); }
   /* The category drill-down covers the window below the chat bar. The page
      underneath stays rendered, so closing is instant and the scroll position
      survives. */
@@ -405,8 +402,7 @@
     overflow-y: auto; overscroll-behavior: contain;
   }
   .drill-head {
-    position: sticky; top: 0; z-index: 3; background: var(--panel);   /* above the tables' heads (2) */
-    border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 3; background: var(--bg);   /* above the tables' heads (2) */
     display: flex; align-items: center; gap: 12px; padding: 13px 24px;
   }
   .drill-head h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.02em;
@@ -414,16 +410,16 @@
   .drill-head .sub { color: var(--ink-dim); font-size: 13px; }
   .drill-close {
     margin-left: auto; flex: none; width: 30px; height: 30px; border-radius: 0;
-    border: 1px solid var(--line); background: var(--panel); color: var(--ink-dim);
+    border: 0; background: var(--hover); color: var(--ink-dim);
     font: inherit; font-size: 17px; line-height: 1; cursor: pointer;
   }
-  .drill-close:hover { background: var(--hover); color: var(--ink); }
+  .drill-close:hover { color: var(--ink); }
   .drill-body { padding: 20px 24px 64px; }
   body.locked { overflow: hidden; }
   /* A span in a table cell, so it needs display: block to take a height. */
   .bar { display: block; height: 6px; background: var(--line-soft); overflow: hidden; }
   .bar > i { display: block; height: 100%; }
-  .hint { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--move);
+  .hint { background: var(--panel); border-left: 3px solid var(--move);
           border-radius: 0; padding: 12px 16px; margin-bottom: var(--gap); font-size: 13px; }
   form.holding { display: grid; grid-template-columns: 2fr 1.4fr 1fr 1fr auto; gap: 8px; align-items: end; }
   @media (max-width: 900px) { form.holding { grid-template-columns: 1fr 1fr; } }
@@ -433,14 +429,14 @@
      field and a button each come out a pixel or two off a text field. */
   form.holding input {
     width: 100%; height: 38px; padding: 7px 9px; font: inherit; color: var(--ink);
-    background: var(--bg); border: 1px solid var(--line); border-radius: 0;
+    background: var(--bg); border: 0; border-radius: 0;
   }
   form.holding input:focus { outline: 2px solid var(--move); outline-offset: -1px; }
   .btn { height: 38px; padding: 0 16px; font: inherit; font-family: var(--mono); font-size: 12px;
          text-transform: uppercase; letter-spacing: .06em; cursor: pointer;
-         border: 1px solid var(--accent); background: var(--accent); color: var(--bg); }
-  .btn.ghost { background: none; color: var(--ink-dim); border-color: var(--line); }
-  .btn.ghost:hover { color: var(--ink); border-color: var(--ink-faint); }
+         border: 0; background: var(--accent); color: var(--bg); }
+  .btn.ghost { background: var(--hover); color: var(--ink-dim); }
+  .btn.ghost:hover { color: var(--ink); }
   /* Buttons are only disabled while their request runs. */
   .btn:disabled { opacity: .5; cursor: progress; }
   .rowbtn { background: none; border: 0; color: var(--ink-faint); cursor: pointer;
@@ -461,7 +457,7 @@
   /* margin-top:auto pins this to the bottom when the account list is short,
      and lets it scroll away with the list when it is long. */
   nav .foot {
-    margin-top: auto; padding: 12px 10px 2px; border-top: 1px solid var(--line);
+    margin-top: auto; padding: 12px 10px 2px;
     color: var(--ink-faint); font-size: 11px; line-height: 1.5;
   }
   nav .foot div + div { margin-top: 2px; }
@@ -474,7 +470,7 @@
      its own title instead of under a screen of account names. The foot keeps
      a line to itself. */
   @media (max-width: 860px) {
-    nav { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line);
+    nav { position: static; height: auto; border-bottom: 1px solid var(--line);
           flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 0 12px; padding: 10px 12px; }
     nav .group { margin-bottom: 8px; }
     nav button { width: auto; }
@@ -554,10 +550,10 @@
   #agentFull {
     position: absolute; top: 8px; right: 12px; z-index: 2; display: none;
     width: 24px; height: 24px; padding: 0; align-items: center; justify-content: center;
-    border: 1px solid var(--line); background: var(--bg); color: var(--ink-dim);
+    border: 0; background: var(--hover); color: var(--ink-dim);
     border-radius: 0; cursor: pointer;
   }
-  #agentFull:hover { color: var(--ink); border-color: var(--ink-faint); }
+  #agentFull:hover { color: var(--ink); }
   #agent.open #agentFull { display: flex; }
   #agentFull .shrink, #agent.full #agentFull .grow { display: none; }
   #agent.full #agentFull .shrink { display: block; }
@@ -568,7 +564,6 @@
     max-height: 40vh; padding: calc((var(--bar) - 1.45em) / 2) 0;
     border: 0; background: none; overscroll-behavior: contain;
     color: var(--ink); font: inherit; line-height: 1.45;
-    caret-color: var(--in);
   }
   #agentInput:focus { outline: none; }
   #agent:focus-within #agentInput::placeholder { color: var(--ink-dim); }
@@ -597,17 +592,18 @@
     height: var(--control); padding: 0 8px; border-radius: 0; cursor: pointer;
     display: inline-flex; align-items: center; font: 12px/1 var(--mono);
   }
-  #agentSend { border: 1px solid var(--accent); background: var(--accent); color: var(--bg); }
-  #agentStop { border: 1px solid var(--line); background: none; color: var(--ink-dim); }
-  #agentStop:hover { color: var(--ink); border-color: var(--ink-faint); }
+  #agentSend { border: 0; background: var(--accent); color: var(--bg); }
+  #agentStop { border: 0; background: var(--hover); color: var(--ink-dim); }
+  #agentStop:hover { color: var(--ink); }
 
   /* One rhythm for the whole conversation: 18px between turns, 8px between the
      parts of a turn, and 2px between the agent's working steps so they read as
-     a single block. Your messages carry the accent colour and a rule down the
-     left, so where one turn ends and the next begins is visible at a glance. */
+     a single block. Your messages carry a white rule down the left, so where
+     one turn ends and the next begins is visible at a glance. Not a fill: code
+     blocks in a reply have one. */
   .turn + .turn { margin-top: 18px; }
   .turn .you {
-    color: var(--in); border-left: 2px solid var(--accent);
+    border-left: 2px solid var(--accent);
     padding: 1px 0 1px 10px; white-space: pre-wrap; line-height: 1.5;
   }
   .turn .you.queued { color: var(--ink-faint); border-left-color: var(--line); }
@@ -623,17 +619,17 @@
   .said > * + * { margin-top: 8px; }
   .said strong { color: var(--ink); font-weight: 600; }
   .said em { font-style: italic; }
-  .said a { color: var(--in); }
+  .said a { color: var(--ink); }
   .said code { font: 13px var(--mono); color: var(--ink); background: var(--panel);
                padding: 0 4px; }
-  .said .md-h { font-weight: 600; color: var(--in); }
+  .said .md-h { font-weight: 600; }
   .said .md-list { display: grid; gap: 2px; }
   .said .md-li { display: flex; gap: 8px; padding-left: calc(var(--level, 0) * 18px); }
   .said .md-mark { flex: none; min-width: 1.4ch; color: var(--ink-faint); }
   .said .md-quote { border-left: 2px solid var(--line); padding-left: 10px; color: var(--ink-dim); }
   .said .md-hr { border: 0; border-top: 1px solid var(--line); }
   .said .md-code { font: 13px/1.5 var(--mono); color: var(--ink-dim); background: var(--panel);
-                   border: 1px solid var(--line); padding: 8px 10px; overflow-x: auto;
+                   padding: 8px 10px; overflow-x: auto;
                    white-space: pre; }
   /* Tables inherit the ledger's rules unless told otherwise: full width, sticky
      uppercase headers, hover fills. None of that belongs in a chat reply. */
@@ -654,14 +650,15 @@
   .work > summary::-webkit-details-marker { display: none; }
   .work > summary:hover { color: var(--ink-dim); }
   .work pre { margin: 6px 0 2px; padding: 8px 10px; overflow-x: auto;
-              background: var(--panel); border: 1px solid var(--line);
+              background: var(--panel);
               font: 11px/1.5 var(--mono); color: var(--ink-dim); }
   .step { color: var(--ink-faint); font: 12px var(--mono); }
-  .propose { border: 1px solid var(--accent-dim); border-left: 3px solid var(--accent);
+  .propose { border-left: 3px solid var(--accent);
              background: var(--panel); padding: 10px 12px; margin-top: 8px; }
   .propose h4 { margin: 0 0 4px; font-size: 13px; font-weight: 500; }
   .propose p { margin: 0 0 8px; font-size: 12px; color: var(--ink-dim); }
   .propose .work { margin-bottom: 8px; }
+  .propose .work pre { background: var(--bg); }
   .propose .btn { margin-right: 6px; }
   .agent-err, .agent-note { margin-top: 8px; }
   .agent-err { color: var(--loss); font-size: 13px; }
@@ -794,16 +791,16 @@ const dayLabel = day => {
 };
 // Dozens of categories have to be told apart at a glance, so hues are spread by
 // the golden angle over the alphabetical list, DATA.categories. Hashing the
-// name collided badly. Saturation stays low and lightness high so they read on
-// the near-black ground without competing with the accent, which is kept for
-// money in, the current item and the primary action. Uncategorised is faint:
-// it means "missing", not a kind of thing.
+// name collided badly. Saturation is high so the charts read bold on the
+// near-black ground. Uncategorised is faint: it means "missing", not a kind of
+// thing.
 function colourFor(name) {
   const i = name && name !== "Uncategorised" ? DATA.categories.indexOf(name) : -1;
   if (i < 0) return css("--ink-faint");
   // Lightness is set by contrast, not taste: the badge label is the dark
-  // ground colour, so a fill below ~66% drops under 4.5:1 on some hues.
-  return `hsl(${Math.round(i * 137.508) % 360} 38% ${i % 2 ? 66 : 76}%)`;
+  // ground colour, and at 70% saturation a fill below 66% drops under 4.5:1
+  // on the blues.
+  return `hsl(${Math.round(i * 137.508) % 360} 70% ${i % 2 ? 66 : 74}%)`;
 }
 
 const MONTH_LABEL = m => {
@@ -866,8 +863,8 @@ function totals(rows) {
   return {income, spend, net: income - spend, count: rows.length};
 }
 
-// Green for a surplus, red for a loss, neither for zero. Only the Net cards
-// use it: Money in and Money out keep the page's blurple and ink.
+// Green for a surplus, red for a loss, neither for zero. The Net and cashflow
+// balance cards use it: Money in is always green and Money out always ink.
 const tone = n => n > 0 ? "gain" : n < 0 ? "loss" : "even";
 
 // ---------- sidebar ----------
@@ -1010,8 +1007,8 @@ function draw(id, config) {
 
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
-// Chart.js ships Helvetica, grey lines and a black tooltip, none of which fit
-// this palette. Set once from the page's tokens, so a chart that passes its
+// Chart.js ships Helvetica, black gridlines that vanish on a dark ground and
+// a black tooltip, none of which fit this palette. Set once from the page's tokens, so a chart that passes its
 // own `scales`, and so replaces baseOptions' scales whole, still matches.
 Chart.defaults.font.family = css("--mono");
 Chart.defaults.scale.ticks.font = {size: 11};
@@ -1022,8 +1019,8 @@ Chart.defaults.plugins.legend.labels.font = {family: css("--sans")};
 Chart.defaults.color = css("--ink-faint");      // tick and legend text
 Chart.defaults.borderColor = css("--line");     // gridlines and axis borders
 Object.assign(Chart.defaults.plugins.tooltip, {
-  backgroundColor: css("--panel"), borderColor: css("--line"), borderWidth: 1,
-  titleColor: css("--ink-dim"), bodyColor: css("--ink"), multiKeyBackground: css("--panel"),
+  backgroundColor: css("--hover"),
+  titleColor: css("--ink-dim"), bodyColor: css("--ink"), multiKeyBackground: css("--hover"),
 });
 // Chart.js animates every redraw. Whoever asked the system for less motion
 // gets none.
@@ -2291,7 +2288,7 @@ function drillBody(name, rows, days) {
         <div class="v num">${money(middle)}</div>
         <div class="note">middle transaction</div></div>
       <div class="card"><div class="caption">Most spent at</div>
-        <div class="v" style="font-size:14px;font-weight:600">${
+        <div class="v" style="font-size:14px">${
           top.length ? esc(top[0][0].slice(0, 26)) : "—"}</div>
         <div class="note">${top.length ? money(top[0][1]) : ""}</div></div>
     </div>
