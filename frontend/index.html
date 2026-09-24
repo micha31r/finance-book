@@ -10,17 +10,19 @@
 <!-- No icon. Saying so stops the browser asking for one and logging a 404. -->
 <link rel="icon" href="data:,">
 <style>
-  /* Near-black and neutral greys, flat fills, zero radius, bold figures, mono
-     numbers in tables and uppercase labels.
+  /* Neutral greys, flat fills, zero radius, bold figures, mono numbers in
+     tables and uppercase labels. Dark by default, light when the system is
+     set to light.
 
      Surfaces are told apart by fill, not by borders: cards, panels and tables
      sit one step lighter than the ground. Lines are left only where rows need
      them.
 
-     In the chrome, colour always means something. White marks the current
-     item and the primary action. Green is money in, red is money out where
-     it is shown, and amber is a what-if. Everything else is grey. Categories
-     are the exception: each gets its own hue, so dozens can be told apart. */
+     In the chrome, colour always means something. The ink colour, white on
+     dark and black on light, marks the current item and the primary action.
+     Green is money in, red is money out where it is shown, and amber is a
+     what-if. Everything else is grey. Categories are the exception: each gets
+     its own hue, so dozens can be told apart. */
   :root {
     color-scheme: dark;
     --bg: #0c0c0e;          /* ground */
@@ -33,13 +35,14 @@
     --ink-dim: #b8b8c0;
     --ink-faint: #909099;
     --in: #3ddc84;          /* money in, positive */
-    --out: #f4f4f5;         /* money out stays plain ink */
-    --move: #909099;        /* transfers stay grey */
+    --out: var(--ink);      /* money out stays plain ink */
+    --move: var(--ink-faint); /* transfers stay grey */
     --loss: #ff5c5c;        /* spending in the transaction tables, a negative net */
     --plan: #f5b544;        /* a what-if: a plan you typed in, not a bank row */
     /* Text on an accent fill is --bg. */
-    --accent: #f4f4f5;      /* current item, primary action */
+    --accent: var(--ink);   /* current item, primary action */
     --accent-dim: #3a3a40;  /* text selection */
+    /* The category fills are made in the script: colourFor. */
     --gap: 14px;           /* one spacing step, horizontal and vertical */
     --bar: 38px;           /* the chat bar's one-line height; the page sits below it */
     --control: 22px;       /* the chat bar's Send and Stop buttons */
@@ -51,7 +54,31 @@
     --display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
     --sans: "IBM Plex Sans", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-    scrollbar-color: var(--line) transparent;   /* a dark thumb on a clear track */
+    scrollbar-color: var(--line) transparent;   /* a quiet thumb on a clear track */
+  }
+  /* The same roles on a pale grey ground with white surfaces. Green, red and
+     amber are deeper, so as text and as badge fills they still hold 4.5:1,
+     on a hovered row too. */
+  @media (prefers-color-scheme: light) {
+    :root {
+      color-scheme: light;
+      --bg: #f2f2f4;
+      --panel: #ffffff;
+      --line: #dedee3;
+      --line-soft: #ebebef;
+      --rule: #efeff2;
+      --hover: #e6e6ea;
+      --ink: #0c0c0e;
+      --ink-dim: #45454d;
+      --ink-faint: #65656e;
+      --in: #08763e;
+      --loss: #c4212b;
+      --plan: #935600;
+      --accent-dim: #d4d4da;
+      /* The same hues, deep enough to show at 3:1 on the pale ground. */
+      --spectrum: linear-gradient(90deg, #8c81cf, #4893c4, #009e8a,
+                                  #bb8100, #dd5da2, #967ae7, #8c81cf);
+    }
   }
   * { box-sizing: border-box; }
   /* The browser's own tick box has round corners and ticks in the system
@@ -67,13 +94,13 @@
     content: ""; width: 7px; height: 3px; margin-top: -2px; color: var(--bg);
     border: solid; border-width: 0 0 2px 2px; transform: rotate(-45deg);
   }
-  /* Other browser defaults, which draw in the system blue or a grey too dark
-     for this ground. */
+  /* Other browser defaults, which draw in the system blue or a grey of their
+     own. */
   ::placeholder { color: var(--ink-faint); }
   ::selection { background: var(--accent-dim); color: var(--ink); }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  /* Chrome draws the date picker's calendar in pure white. The same shape cut
-     out of a token colour replaces it. */
+  /* Chrome draws the date picker's calendar in its own black or white. The
+     same shape cut out of a token colour replaces it. */
   ::-webkit-calendar-picker-indicator {
     cursor: pointer; background: var(--ink-dim);
     mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5'><rect x='2' y='3' width='12' height='11'/><path d='M2 7h12M5 1v4M11 1v4'/></svg>") center / 14px no-repeat;
@@ -121,7 +148,7 @@
   nav button[aria-current="true"] { background: var(--accent); color: var(--bg); }
   nav button[aria-current="true"] .name { font-weight: 500; }
   nav button .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  nav button .bal { font-size: 12px; opacity: .75; }
+  nav button .bal { font-size: 12px; opacity: .8; }   /* .75 drops under 4.5:1 on light */
 
   /* ---------- main ---------- */
   main { padding: 20px 24px 32px; min-width: 0; }
@@ -223,7 +250,8 @@
     border: 1px solid transparent; border-radius: 0;
   }
   .tcap .find:focus { outline: none; border-color: var(--accent); }
-  /* Chrome's clear button is pure white. This is the same cross in a token. */
+  /* Chrome's clear button is its own white or blue. This is the same cross in
+     a token. */
   .tcap .find::-webkit-search-cancel-button {
     appearance: none; width: 10px; height: 10px; margin-left: 6px; cursor: pointer;
     background: var(--ink-dim);
@@ -598,9 +626,9 @@
 
   /* One rhythm for the whole conversation: 18px between turns, 8px between the
      parts of a turn, and 2px between the agent's working steps so they read as
-     a single block. Your messages carry a white rule down the left, so where
-     one turn ends and the next begins is visible at a glance. Not a fill: code
-     blocks in a reply have one. */
+     a single block. Your messages carry a rule in the accent colour down the
+     left, so where one turn ends and the next begins is visible at a glance.
+     Not a fill: code blocks in a reply have one. */
   .turn + .turn { margin-top: 18px; }
   .turn .you {
     border-left: 2px solid var(--accent);
@@ -789,18 +817,38 @@ const dayLabel = day => {
   const [y, m, d] = day.split("-");
   return `${+d} ${MONTHS[+m - 1]} ${y}`;
 };
+const LIGHT = matchMedia("(prefers-color-scheme: light)");
 // Dozens of categories have to be told apart at a glance, so hues are spread by
 // the golden angle over the alphabetical list, DATA.categories. Hashing the
-// name collided badly. Saturation is high so the charts read bold on the
-// near-black ground. Uncategorised is faint: it means "missing", not a kind of
-// thing.
+// name collided badly. Uncategorised is faint: it means "missing", not a kind
+// of thing.
 function colourFor(name) {
   const i = name && name !== "Uncategorised" ? DATA.categories.indexOf(name) : -1;
   if (i < 0) return css("--ink-faint");
-  // Lightness is set by contrast, not taste: the badge label is the dark
-  // ground colour, and at 70% saturation a fill below 66% drops under 4.5:1
-  // on the blues.
-  return `hsl(${Math.round(i * 137.508) % 360} 70% ${i % 2 ? 66 : 74}%)`;
+  // OKLCH, not HSL, so the hues come out close to one lightness and one badge
+  // label reads on all of them. HSL's yellows are far lighter than its blues.
+  // The label is the ground colour, so the fills are light on dark and deep
+  // on light. Each mode's values keep the label over 4.5:1 on every hue.
+  const [even, odd, chroma] = LIGHT.matches ? [0.49, 0.44, 0.17] : [0.72, 0.67, 0.15];
+  return oklch(i % 2 ? odd : even, chroma, i * 137.508 % 360);
+}
+
+// An OKLCH colour as #rrggbb, with Björn Ottosson's OKLab matrices. Chart.js
+// cannot parse oklch(), and it has to parse a fill to shade it on hover.
+function oklch(l, c, h) {
+  const a = c * Math.cos(h * Math.PI / 180), b = c * Math.sin(h * Math.PI / 180);
+  const L = (l + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const M = (l - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const S = (l - 0.0894841775 * a - 1.2914855480 * b) ** 3;
+  return "#" + [
+    4.0767416621 * L - 3.3077115913 * M + 0.2309699292 * S,
+    -1.2684380046 * L + 2.6097574011 * M - 0.3413193965 * S,
+    -0.0041960863 * L - 0.7034186147 * M + 1.7076147010 * S,
+  ].map(v => {
+    v = Math.min(1, Math.max(0, v));     // a hue sRGB cannot show is clipped
+    v = v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055;
+    return Math.round(v * 255).toString(16).padStart(2, "0");
+  }).join("");
 }
 
 const MONTH_LABEL = m => {
@@ -1007,20 +1055,34 @@ function draw(id, config) {
 
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
-// Chart.js ships Helvetica, black gridlines that vanish on a dark ground and
-// a black tooltip, none of which fit this palette. Set once from the page's tokens, so a chart that passes its
-// own `scales`, and so replaces baseOptions' scales whole, still matches.
+// Chart.js ships Helvetica, faint black gridlines and a black tooltip, none of
+// which fit this palette. Set as defaults from the
+// page's tokens, so a chart that passes its own `scales`, and so replaces
+// baseOptions' scales whole, still matches.
 Chart.defaults.font.family = css("--mono");
 Chart.defaults.scale.ticks.font = {size: 11};
 // Legends list category names, which the page sets in sans. Mono is wider: a
 // long legend wrapped to an extra row, and the shorter plot dropped every
 // other axis label, $0 among them.
 Chart.defaults.plugins.legend.labels.font = {family: css("--sans")};
-Chart.defaults.color = css("--ink-faint");      // tick and legend text
-Chart.defaults.borderColor = css("--line");     // gridlines and axis borders
-Object.assign(Chart.defaults.plugins.tooltip, {
-  backgroundColor: css("--hover"),
-  titleColor: css("--ink-dim"), bodyColor: css("--ink"), multiKeyBackground: css("--hover"),
+function chartColours() {
+  Chart.defaults.color = css("--ink-faint");      // tick and legend text
+  Chart.defaults.borderColor = css("--line");     // gridlines and axis borders
+  Object.assign(Chart.defaults.plugins.tooltip, {
+    backgroundColor: css("--hover"),
+    titleColor: css("--ink-dim"), bodyColor: css("--ink"), multiKeyBackground: css("--hover"),
+  });
+}
+chartColours();
+// The stylesheet follows a switch between light and dark by itself. The
+// charts and the category fills take colours from the script, so they are
+// set again and the page redrawn. Not while you are typing in the page: a
+// redraw rebuilds its forms. The next render, after the save, catches up.
+LIGHT.addEventListener("change", () => {
+  chartColours();
+  const typing = document.querySelector(
+    ":is(main, #drill) :is(input:not([type=checkbox]), textarea, select):focus");
+  if (DATA && !typing) render();
 });
 // Chart.js animates every redraw. Whoever asked the system for less motion
 // gets none.
@@ -1817,11 +1879,11 @@ function renderDrill(rows, spent, days) {
   document.getElementById("drillBody").innerHTML =
     controlsHtml() + drillBody(name, catRows, days);
 
-  // Focus moves into the overlay only as it opens. A later render, such as a
-  // period picked inside it, is not a reason to move it.
+  // Focus and scroll reset only as it opens. A later render, such as a period
+  // picked inside it or a row edited, is not a reason to move either.
   const opening = panel.hidden;
   showDrill(true);
-  panel.scrollTop = 0;
+  if (opening) panel.scrollTop = 0;
   drawDrillChart(name, catRows);
   wireControls(panel);
   if (opening) document.getElementById("drillClose").focus();
