@@ -13,90 +13,79 @@
 <!-- No icon. Saying so stops the browser asking for one and logging a 404. -->
 <link rel="icon" href="data:,">
 <style>
-  /* Calm and soft: a very light beige ground, white surfaces, pastel cards,
-     a soft serif for titles, the sans for every number, and rounded corners
-     everywhere. Light by default, dark when the system is set to dark.
+  /* Quiet and clear: black type on a warm off-white, white surfaces edged
+     with a hairline, small uppercase mono labels, and a soft serif for the
+     titles. Numbers are always in the sans. Light by default, dark when the
+     system is set to dark.
 
-     Colour means something. Blue is what you hold, mint is money in, coral is
-     money out, yellow is a what-if or a tip, and pink is the chat. Each
-     pastel comes with a dark ink of its own hue for text on it. In the
-     transaction tables spending is red and money in green, as on a bank
-     statement. Two exceptions: each category gets its own hue, so dozens can
-     be told apart, and the sidebar's icon tiles only tell the views apart. */
+     Colour is kept for meaning, and kept small. In the transaction tables
+     spending is red and money in green, as on a bank statement. Elsewhere a
+     dot before a label says it: green for money in, red for money out,
+     amber for a what-if, and a category's own hue for a category. The charts
+     need hues to tell series apart, so they keep them, muted. The one
+     playful touch is the Ask pill's pastel edge. */
   :root {
     color-scheme: light;
-    --bg: #f7f4ef;          /* ground: a very light beige */
+    --bg: #f2efe9;          /* ground: a warm off-white */
     --panel: #ffffff;       /* surface: tables, charts, forms */
-    --soft: #ede9e1;        /* chips, inputs, hover on the ground: a deeper beige */
-    --line: #e3dfd8;        /* hairlines: column heads, chart gridlines */
-    --rule: #f2f0ec;        /* table row rule */
-    --hover: #f9f7f4;       /* row hover on a surface */
-    --ink: #191511;
-    --ink-dim: #4f4943;     /* secondary text, and any text on --soft */
-    --ink-faint: #6c6660;   /* captions and notes; 4.5:1 even on --soft */
+    --soft: #e9e5de;        /* chips, inputs, hover on the ground */
+    --line: #ddd8cf;        /* hairlines: card edges, column heads, chart gridlines */
+    --rule: #eeebe5;        /* table row rule */
+    --hover: #f8f6f2;       /* row hover on a surface */
+    --ink: #232323;
+    --ink-dim: #4d4b47;     /* secondary text, and any text on --soft */
+    --ink-faint: #65635e;   /* captions and notes; 4.5:1 even on --soft */
     --in: #1e7546;          /* money in */
     --out: var(--ink);      /* money out, outside the transaction tables */
     --move: var(--ink-faint);   /* transfers stay grey */
     --loss: #af3c3a;        /* spending in the tables, and a negative verdict */
     --plan: #915c08;        /* a what-if: a plan you typed in, not a bank row */
     --accent: var(--ink);   /* primary buttons; their text is --bg */
-    --focus: #3a75af;
-    --neutral: #b4ada4;     /* what has no category: Out bars, Uncategorised; the switch when off */
-    --sand: #907c67;        /* the edge of a field while you type in it: a deeper beige, 3:1 */
-    --line-chart: #386ca0;  /* the balance and cashflow lines */
-    --in-bar: #94b15e;      /* income with no category, in the charts; the --mint green */
-    /* The pastels. -ink is the text on each, and -soft a paler fill for the
-       pills in the tables and the tip cards. */
-    --blue: #b5d5f4;   --blue-ink: #0f253b;
-    --mint: #94b15e;   --mint-ink: #1e280b;   --mint-soft: #e4f1d1;
-    --coral: #f9b59f;  --coral-ink: #3c180f;  --coral-soft: #ffded3;
-    --yellow: #f5df8d; --yellow-ink: #2f2107; --yellow-soft: #fdf1c3;
-    --pink: #f6cedf;   --pink-ink: #361927;
-    /* The four pastels in a row. It marks the surface where you talk to a
-       model rather than read your own books. */
-    --spectrum: linear-gradient(90deg, var(--yellow), var(--blue), var(--pink), var(--coral));
-    --shadow: 0 1px 2px rgb(45 32 18 / .06), 0 2px 8px rgb(45 32 18 / .04);
-    --shadow-pop: 0 4px 12px rgb(45 32 18 / .08), 0 24px 64px rgb(45 32 18 / .16);
+    --focus: var(--ink);
+    --neutral: #bdb8b0;     /* what has no category: Out bars, Uncategorised; the switch when off */
+    --sand: #84807a;        /* the edge of a field while you type in it, 3:1 */
+    --line-chart: #232323;  /* the balance and cashflow lines */
+    --in-bar: #94b15e;      /* money in's green: its dot, and income with no category in the charts */
+    /* Four pastels in a row, round the Ask pill: it marks the way to the
+       chat, where you talk to a model rather than read your own books. */
+    --spectrum: linear-gradient(90deg, #f5df8d, #b5d5f4, #f6cedf, #f9b59f);
+    /* A hairline ring rather than a shadow, for anything that sits on the
+       page. Floating things get a real shadow. */
+    --shadow: 0 0 0 1px var(--line);
+    --shadow-pop: 0 4px 12px rgb(35 35 35 / .08), 0 24px 64px rgb(35 35 35 / .14);
     --display: "Fraunces", ui-serif, Georgia, serif;
     --sans: "Geist", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
     --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
     --gap: 16px;            /* one spacing step, horizontal and vertical */
     --bar: 0px;             /* the top bar, which only narrow screens have; the page sits below it */
     --side: 248px;          /* the sidebar */
-    --radius: 20px;         /* cards, panels, tables */
+    --radius: 12px;         /* cards, panels, tables */
     --drill-head: 76px;     /* the drill-down's band, which its table heads stick under */
-    scrollbar-color: #d2cdc5 transparent;   /* a quiet thumb on a clear track */
+    scrollbar-color: #cfcac1 transparent;   /* a quiet thumb on a clear track */
   }
-  /* The same roles on a warm near-black. The pastels turn into deep tints
-     with a light ink, and every text colour still holds 4.5:1. */
+  /* The same roles on a warm near-black, and every text colour still holds
+     4.5:1. */
   @media (prefers-color-scheme: dark) {
     :root {
       color-scheme: dark;
-      --bg: #13100d;
-      --panel: #1c1915;
-      --soft: #2c2822;
-      --line: #37322c;
-      --rule: #23201c;
-      --hover: #211e19;
-      --ink: #f5f1ec;
-      --ink-dim: #cfcac1;
-      --ink-faint: #a49e94;
+      --bg: #161513;
+      --panel: #1f1e1b;
+      --soft: #2b2a27;
+      --line: #393732;
+      --rule: #292724;
+      --hover: #252420;
+      --ink: #f2efe9;
+      --ink-dim: #cdc9c1;
+      --ink-faint: #a09c94;
       --in: #73ce95;
       --loss: #f07f77;
       --plan: #e5bf6d;
-      --focus: #8bbcef;
-      --neutral: #59544e;
-      --sand: #8a775d;
-      --line-chart: #8bbcef;
+      --neutral: #5b5852;
+      --sand: #8f8a81;
+      --line-chart: #f2efe9;
       --in-bar: #8aa35d;
-      --blue: #23374c;   --blue-ink: #d1e7ff;
-      --mint: #2f3a1c;   --mint-ink: #ddebc7;   --mint-soft: #29311b;
-      --coral: #522c20;  --coral-ink: #ffdacd;  --coral-soft: #44281f;
-      --yellow: #45391a; --yellow-ink: #f6e8b3; --yellow-soft: #3c3216;
-      --pink: #492a39;   --pink-ink: #fbdae8;
-      --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 2px 8px rgb(0 0 0 / .2);
       --shadow-pop: 0 4px 12px rgb(0 0 0 / .4), 0 24px 64px rgb(0 0 0 / .5);
-      scrollbar-color: #4a443b transparent;
+      scrollbar-color: #45423c transparent;
     }
   }
   * { box-sizing: border-box; }
@@ -118,7 +107,7 @@
   /* Other browser defaults, which draw in the system blue or a grey of their
      own. */
   ::placeholder { color: var(--ink-faint); }
-  ::selection { background: var(--yellow); color: var(--yellow-ink); }
+  ::selection { background: var(--line); color: var(--ink); }
   :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   /* Chrome draws the date picker's calendar in its own black or white. The
      same shape cut out of a token colour replaces it. */
@@ -138,19 +127,18 @@
   /* Tabular figures, so amounts line up in a column. */
   .num { font-variant-numeric: tabular-nums; }
   .in { color: var(--in); } .out { color: var(--out); } .move { color: var(--move); }
-  .caption { font: 600 11px/1.4 var(--sans); color: var(--ink-faint);
-             text-transform: uppercase; letter-spacing: .14em; }
+  /* Labels are small uppercase mono, like the tab on a folder. */
+  .caption { font: 500 11px/1.4 var(--mono); color: var(--ink-faint);
+             text-transform: uppercase; letter-spacing: .04em; }
   .ink-faint { color: var(--ink-faint); }
   /* Digits inside a serif title: numbers are always in the sans. */
   .digits { font-family: var(--sans); }
 
-  /* The pastel fills. A card, panel, nav icon or report takes one of these
-     and paints itself in --tone, writing in --tone-ink. */
-  .tone-blue   { --tone: var(--blue);   --tone-ink: var(--blue-ink); }
-  .tone-mint   { --tone: var(--mint);   --tone-ink: var(--mint-ink); }
-  .tone-coral  { --tone: var(--coral);  --tone-ink: var(--coral-ink); }
-  .tone-yellow { --tone: var(--yellow); --tone-ink: var(--yellow-ink); }
-  .tone-pink   { --tone: var(--pink);   --tone-ink: var(--pink-ink); }
+  /* A small dot before a label, in --dot: the one place most colour lives. */
+  .dot::before {
+    content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px;
+    border-radius: 50%; background: var(--dot, var(--ink-faint)); vertical-align: 1px;
+  }
 
   /* ---------- top bar ---------- */
   /* Narrow screens only, holding the ☰ and the name. Wide screens put the
@@ -165,7 +153,7 @@
   nav .brand { padding: 14px 12px 24px; }
   .icon-btn {
     display: inline-grid; place-items: center; flex: none; width: 34px; height: 34px;
-    padding: 0; border: 0; border-radius: 999px; cursor: pointer;
+    padding: 0; border: 0; border-radius: 8px; cursor: pointer;
     background: none; color: var(--ink-dim);
   }
   .icon-btn:hover { background: var(--soft); color: var(--ink); }
@@ -181,7 +169,7 @@
     background: linear-gradient(var(--panel), var(--panel)) padding-box, var(--spectrum) border-box;
     color: var(--ink); font: 500 13.5px var(--sans); box-shadow: var(--shadow-pop);
   }
-  .ask .spark { flex: none; color: var(--pink-ink); }
+  .ask .spark { flex: none; }
   /* While the agent works the dots show after the word, so a closed panel
      still says an answer is coming. */
   .ask .dots { display: none; }
@@ -210,19 +198,17 @@
   nav .group > .caption { padding: 0 12px 6px; }
   nav button {
     display: flex; width: 100%; gap: 10px; align-items: center; text-align: left;
-    min-height: 36px; padding: 5px 12px; border: 0; border-radius: 12px; cursor: pointer;
+    min-height: 36px; padding: 5px 12px; border: 0; border-radius: 8px; cursor: pointer;
     background: none; color: var(--ink-dim); font: 450 13.5px/1.3 var(--sans);
   }
   nav button:hover { background: var(--soft); color: var(--ink); }
-  /* The current item is a white pill lifted off the ground. */
+  /* The current item is white, edged with a hairline. */
   nav button[aria-current="true"] { background: var(--panel); color: var(--ink);
                                     font-weight: 550; box-shadow: var(--shadow); }
-  /* The icon tile beside every view that is not a bank account, so the eye
-     finds them first. */
-  nav .ico {
-    display: grid; place-items: center; flex: none; width: 26px; height: 26px; margin-left: -5px;
-    border-radius: 8px; background: var(--tone, var(--soft)); color: var(--tone-ink, var(--ink-dim));
-  }
+  /* The icon beside every view that is not a bank account, so the eye finds
+     them first. */
+  nav .ico { display: grid; place-items: center; flex: none; width: 18px; color: var(--ink-faint); }
+  nav button[aria-current="true"] .ico { color: var(--ink); }
   nav button .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   nav button .bal { font-size: 12px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
   /* margin-top:auto pins this to the bottom when the account list is short,
@@ -239,9 +225,9 @@
   .switch { position: relative; flex: none; width: 30px; height: 18px; border-radius: 999px;
             background: var(--neutral); transition: background .15s; }
   .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
-                   border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .25);
+                   border-radius: 50%; background: var(--panel); box-shadow: 0 1px 2px rgb(0 0 0 / .25);
                    transition: transform .15s; }
-  [aria-checked="true"] > .switch { background: var(--plan); }
+  [aria-checked="true"] > .switch { background: var(--ink); }
   [aria-checked="true"] > .switch::after { transform: translateX(12px); }
 
   /* ---------- main ---------- */
@@ -250,35 +236,37 @@
      every view's header lines up whatever it holds. */
   .title { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px;
            align-items: end; margin: 4px 0 20px; }
-  .title h2 { grid-column: 1; margin: 0; font: 550 34px/1.1 var(--display); letter-spacing: -0.015em; }
-  .title .sub { grid-column: 1; margin-top: 6px; color: var(--ink-faint); font-size: 14px; }
+  .title h2 { grid-column: 1; margin: 0; font: 500 34px/1.1 var(--display); letter-spacing: -0.015em; }
+  .title .sub { grid-column: 1; margin-top: 6px; color: var(--ink-dim); font-size: 14.5px; }
   .title .btn { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
-  /* What ingest.py said about an upload, tinted by how it went. */
+  /* What ingest.py said about an upload. The dot by its heading says how it
+     went: green loaded, amber waiting on you, red failed. */
   .report { position: relative; }
+  .report > h3::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 9px;
+                         border-radius: 50%; background: var(--dot); vertical-align: 2px; }
+  .report.ok { --dot: var(--in); } .report.wait { --dot: var(--plan); } .report.fail { --dot: var(--loss); }
   .report .close { position: absolute; top: 12px; right: 12px; }
   .report form { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
   .report select { height: 38px; padding: 0 12px; font: inherit; color: var(--ink);
-                   background: var(--panel); border: 0; border-radius: 12px; }
-  .report pre { margin: 0; max-height: 360px; overflow: auto; padding: 12px 14px; border-radius: 12px;
-                background: color-mix(in srgb, var(--panel) 60%, transparent);
-                font: 12px/1.55 var(--mono); }
+                   background: var(--panel); border: 0; border-radius: 8px; box-shadow: var(--shadow); }
+  .report pre { margin: 0; max-height: 360px; overflow: auto; padding: 12px 14px; border-radius: 8px;
+                background: var(--bg); color: var(--ink-dim); font: 12px/1.55 var(--mono); }
 
-  /* The cards: a bento row. The first card is the hero, twice as wide and
-     toned; the rest share what is left, wrapping as the page narrows, and a
-     card alone on its row stretches across it. */
+  /* The cards: a row of white cards. The first is the hero, twice as wide;
+     the rest share what is left, wrapping as the page narrows, and a card
+     alone on its row stretches across it. */
   .cards { display: flex; flex-wrap: wrap; gap: var(--gap); margin-bottom: var(--gap); }
   .card {
     flex: 1 1 170px; min-width: 0; container-type: inline-size;
-    padding: 18px 20px; border-radius: var(--radius);
-    background: var(--tone, var(--panel)); color: var(--tone-ink, var(--ink));
+    padding: 18px 20px; border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow);
   }
   .card.hero { flex: 2 1 360px; padding: 20px 24px; }
-  .card .caption, .card .note { color: var(--tone-ink, var(--ink-faint)); }
+  .card .note { color: var(--ink-faint); }
   /* The figure is the loudest thing on the page, in the sans like every
      number. It scales with the card, so "+$123,456.78" still fits a narrow
      one. */
-  .card .v { margin-top: 8px; font: 600 clamp(19px, 11cqi, 28px)/1.15 var(--sans);
-             letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .card .v { margin-top: 10px; font: 500 clamp(19px, 11cqi, 28px)/1.15 var(--sans);
+             letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
   .card.hero .v { font-size: clamp(26px, 9cqi, 40px); }
   /* A name rather than a figure, as in "Most spent at". */
   .card .v.text { font: 600 15px/1.35 var(--sans); overflow-wrap: anywhere; }
@@ -286,7 +274,8 @@
   /* What the hero is made of, side by side under its figure. */
   .card .parts { display: flex; flex-wrap: wrap; gap: 6px 24px; margin-top: 14px; }
   .card .parts div { display: grid; }
-  .card .parts span:first-child { font-size: 11.5px; }
+  .card .parts span:first-child { font: 500 10.5px/1.6 var(--mono); text-transform: uppercase;
+                                   letter-spacing: .04em; color: var(--ink-faint); }
   .card .parts span:last-child { font-size: 14px; font-weight: 550; font-variant-numeric: tabular-nums; }
   /* A card that gives a verdict, Net or a cashflow balance, goes red for a
      loss. A surplus is green like money in, and zero stays grey, like a
@@ -295,10 +284,10 @@
   .card .v.loss { color: var(--loss); }
   .card .v.even { color: var(--move); }
 
-  .panel { background: var(--tone, var(--panel)); color: var(--tone-ink, inherit);
-           border-radius: var(--radius); padding: 20px 22px; margin-bottom: var(--gap); min-width: 0; }
-  .panel > h3 { margin: 0 0 3px; font: 600 17px/1.3 var(--display); }
-  .panel > p { margin: 0 0 14px; font-size: 13px; color: var(--tone-ink, var(--ink-faint)); }
+  .panel { background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow);
+           padding: 20px 22px; margin-bottom: var(--gap); min-width: 0; }
+  .panel > h3 { margin: 0 0 3px; font: 500 17px/1.3 var(--display); }
+  .panel > p { margin: 0 0 14px; font-size: 13px; color: var(--ink-faint); }
   /* Two panels side by side, one above the other once they would get too
      narrow. The grid's gap is the space between them and its margin the
      space below, so the panels' own margins would only double it. A long
@@ -314,22 +303,22 @@
   /* Above everything they filter: the cards, the charts and the tables. */
   .years, .toolbar { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; }
   .years { margin-bottom: 20px; }
-  /* A segmented pill: the choices on a soft track, the current one lifted
-     out in white. Where they do not fit on one line they wrap, and the track
-     rounds its corners less: a scrolling track hid choices off the edge. */
-  .seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: 20px;
+  /* A segmented control: the choices on a soft track, the current one lifted
+     out in white. Where they do not fit on one line they wrap: a scrolling
+     track hid choices off the edge. */
+  .seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: 10px;
          background: var(--soft); }
   .seg button {
-    flex: none; height: 32px; padding: 0 14px; border: 0; border-radius: 999px; cursor: pointer;
+    flex: none; height: 32px; padding: 0 14px; border: 0; border-radius: 7px; cursor: pointer;
     background: none; color: var(--ink-dim); font: 500 13px var(--sans); white-space: nowrap;
   }
   .seg button:hover { color: var(--ink); }
   .seg button[aria-current="true"] { background: var(--panel); color: var(--ink); box-shadow: var(--shadow); }
-  /* A date box: a white pill naming its end, with the input inside drawing
-     no box of its own. */
+  /* A date box: white, naming its end, with the input inside drawing no box
+     of its own. */
   .field {
     display: inline-flex; align-items: center; gap: 4px; height: 38px; padding: 0 8px 0 14px;
-    border-radius: 999px; background: var(--panel); color: var(--ink-faint); font-size: 12.5px;
+    border-radius: 10px; background: var(--panel); color: var(--ink-faint); font-size: 12.5px;
     cursor: text; box-shadow: var(--shadow);
   }
   .field input { height: 100%; padding: 0 4px; border: 0; background: none; color: var(--ink);
@@ -339,19 +328,20 @@
   /* minmax(0, …): a grid column otherwise grows to the period pill's full
      width on a phone, and the account pills run off the screen. */
   .controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-bottom: 20px; }
-  /* Tick-box pills. A ticked one is lifted out in white. */
+  /* Tick boxes with their names. A ticked one is lifted out in white. */
   .picker { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .picker > .caption { margin-right: 6px; }
   .picker label {
     display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px 0 10px;
-    border-radius: 999px; background: var(--soft); color: var(--ink-dim);
+    border-radius: 8px; background: var(--soft); color: var(--ink-dim);
     font-size: 13px; cursor: pointer; user-select: none;
   }
   .picker label:has(input:checked) { background: var(--panel); color: var(--ink); box-shadow: var(--shadow); }
   .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
 
   /* ---------- tables ---------- */
-  .tablewrap { background: var(--panel); border-radius: var(--radius); margin-bottom: var(--gap); }
+  .tablewrap { background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow);
+               margin-bottom: var(--gap); }
   /* Below this, Date, Type, Amount and Balance alone need more than the screen
      has, so let the table scroll inside its own box rather than pushing the
      whole page sideways. Only here: making this a scroll container at any
@@ -384,7 +374,7 @@
      table has one and nine of them shouting would be noise. */
   .findbtn {
     display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0;
-    border: 0; border-radius: 999px; background: none; color: var(--ink-faint); cursor: pointer;
+    border: 0; border-radius: 8px; background: none; color: var(--ink-faint); cursor: pointer;
   }
   .findbtn:hover { background: var(--soft); color: var(--ink); }
   /* On All accounts the chevron and the account name are one button, so the
@@ -401,7 +391,7 @@
   .tcap .find {
     flex: 1 1 12rem; min-width: 0; max-width: 22rem; height: 30px; padding: 0 12px;
     font: inherit; font-size: 13px; color: var(--ink); background: var(--soft);
-    border: 1px solid transparent; border-radius: 999px;
+    border: 1px solid transparent; border-radius: 8px;
   }
   .tcap .find:focus { outline: none; border-color: var(--sand); }
   /* Chrome's clear button is its own white or blue. This is the same cross in
@@ -414,7 +404,7 @@
   .tcap .meta { margin-left: auto; font-size: 12.5px; color: var(--ink-faint);
                 font-variant-numeric: tabular-nums; }
   th {
-    text-align: left; font: 600 11px/1.4 var(--sans); text-transform: uppercase; letter-spacing: .1em;
+    text-align: left; font: 500 10.5px/1.4 var(--mono); text-transform: uppercase; letter-spacing: .04em;
     color: var(--ink-faint); padding: 8px 12px;
     border-bottom: 1px solid var(--line); background: var(--panel);
   }
@@ -486,15 +476,18 @@
   table.fixed { table-layout: fixed; }
   /* One line, the rest on hover. */
   .clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* A soft pill. Its colours arrive as --tag and --tag-ink, so a category can
-     hand over its own pair in a style attribute. */
+  /* A tag: small uppercase mono on a soft box, like a label on a file. A
+     category reads instead as its plain name after a dot of its own hue,
+     which arrives as --dot in a style attribute. */
   .tag {
     display: inline-block; vertical-align: middle; white-space: nowrap;
-    padding: 0 9px; border-radius: 999px; font: 500 12px/20px var(--sans);
-    background: var(--tag, var(--soft)); color: var(--tag-ink, var(--ink-dim));
+    padding: 0 6px; border-radius: 4px; font: 500 10.5px/19px var(--mono);
+    text-transform: uppercase; letter-spacing: .03em; background: var(--soft); color: var(--ink-dim);
   }
-  .tag.in { --tag: var(--mint-soft); --tag-ink: var(--mint-ink); }
-  .tag.out { --tag: var(--coral-soft); --tag-ink: var(--coral-ink); }
+  .tag.cat { padding: 0 0 0 2px; background: none; font: 13px/19px var(--sans);
+             text-transform: none; letter-spacing: normal; }
+  .tag.cat::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 6px;
+                     border-radius: 50%; background: var(--dot, var(--neutral)); vertical-align: 1px; }
   /* In the transaction tables money reads the way a bank statement does:
      spending red, where the rest of the app leaves money out plain ink.
      The amount and the out figure in the header strip agree. */
@@ -503,9 +496,10 @@
      outlined tag says so; the reason is in the tag's title. */
   tr.provisional td.desc, tr.provisional td.date { color: var(--ink-faint); font-style: italic; }
   .tag.pending { background: none; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-faint); }
-  /* A what-if is a plan you typed in, not a bank row. Its tag is yellow and
-     its description is written in the what-if amber, --plan. */
-  .tag.whatif { --tag: var(--yellow-soft); --tag-ink: var(--yellow-ink); }
+  /* A what-if is a plan you typed in, not a bank row. Its tag carries an
+     amber dot, and its description is written in the what-if amber, --plan. */
+  .tag.whatif::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 5px;
+                        border-radius: 50%; background: var(--plan); vertical-align: 1px; }
   tr.whatif td.desc { color: var(--plan); }
 
   /* ---------- editing rows ---------- */
@@ -514,14 +508,14 @@
      so nothing around it moves. */
   .editor {
     height: 22px; margin-block: -2px; padding: 0 6px; font: inherit; font-size: 13px; color: var(--ink);
-    background: var(--soft); border: 1px solid transparent; border-radius: 7px;
+    background: var(--soft); border: 1px solid transparent; border-radius: 6px;
     vertical-align: middle;
   }
   /* The add form is a row of its own, so its fields can be full size. Its
      what-if tick box keeps the tick box styling. */
   tr.add input:not([type=checkbox]), tr.add select {
     height: 32px; padding: 0 10px; font: inherit; font-size: 13px; color: var(--ink);
-    background: var(--soft); border: 1px solid transparent; border-radius: 10px;
+    background: var(--soft); border: 1px solid transparent; border-radius: 8px;
   }
   .editor:focus, tr.add input:not([type=checkbox]):focus, tr.add select:focus {
     outline: none; border-color: var(--sand);
@@ -565,20 +559,21 @@
     overflow-y: auto; overscroll-behavior: contain;
     scroll-padding-top: calc(var(--drill-head) + 100px);   /* as html's, under the band */
   }
-  /* A band in the category's own pastel, which arrives as --tag and --tag-ink.
-     Its content lines up with the centred body below it. */
+  /* A band on the ground, above a hairline. The category's dot beside the
+     name carries its colour. Its content lines up with the centred body
+     below it. */
   .drill-head {
     position: sticky; top: 0; z-index: 3; height: var(--drill-head);   /* above the tables' heads (2) */
     display: flex; align-items: center; gap: 14px;
     padding: 0 max(32px, calc((100% - 1320px) / 2 + 32px));
-    background: var(--tag, var(--soft)); color: var(--tag-ink, var(--ink));
+    background: var(--bg); border-bottom: 1px solid var(--line);
   }
-  .drill-head h2 { margin: 0; font: 600 26px/1.1 var(--display); letter-spacing: -0.01em;
+  .drill-head h2 { margin: 0; font: 500 26px/1.1 var(--display); letter-spacing: -0.01em;
                    display: flex; align-items: center; gap: 10px; }
-  .drill-head .sub { font-size: 14px; }
+  .drill-head .sub { font-size: 14px; color: var(--ink-dim); }
   .drill-close {
     margin-left: auto; flex: none; width: 38px; height: 38px; padding: 0;
-    border: 0; border-radius: 999px; background: var(--panel); color: var(--ink-dim);
+    border: 0; border-radius: 8px; background: var(--panel); color: var(--ink-dim);
     font: inherit; font-size: 15px; line-height: 1; cursor: pointer; box-shadow: var(--shadow);
   }
   .drill-close:hover { color: var(--ink); }
@@ -586,12 +581,14 @@
   body.locked { overflow: hidden; }
 
   /* A span in a table cell, so it needs display: block to take a height. */
-  .bar { display: block; height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
-  .bar > i { display: block; height: 100%; border-radius: 999px; }
-  /* A tip or an explanation: a soft yellow card. */
-  .hint { background: var(--yellow-soft); color: var(--yellow-ink); border-radius: var(--radius);
-          padding: 16px 20px; margin-bottom: var(--gap); font-size: 13.5px; line-height: 1.6; }
-  .hint h3 { margin: 0 0 4px; font: 600 16px/1.3 var(--display); }
+  .bar { display: block; height: 8px; border-radius: 3px; background: var(--soft); overflow: hidden; }
+  .bar > i { display: block; height: 100%; border-radius: 3px; }
+  /* A tip or an explanation: text on a white card, under a mono label. */
+  .hint { background: var(--panel); color: var(--ink-dim); border-radius: var(--radius);
+          box-shadow: var(--shadow); padding: 18px 22px; margin-bottom: var(--gap);
+          font-size: 13.5px; line-height: 1.6; }
+  .hint h3 { margin: 0 0 8px; font: 500 11px/1.4 var(--mono); text-transform: uppercase;
+             letter-spacing: .04em; color: var(--ink-faint); }
   form.holding { display: grid; grid-template-columns: 2fr 1.4fr 1fr 1fr auto; gap: 10px; align-items: end; }
   form.holding.rule-form { grid-template-columns: 1fr 2.4fr auto; }
   @media (max-width: 900px) { form.holding, form.holding.rule-form { grid-template-columns: 1fr 1fr; } }
@@ -600,12 +597,12 @@
      field and a button each come out a pixel or two off a text field. */
   form.holding input {
     width: 100%; height: 40px; padding: 0 14px; font: inherit; color: var(--ink);
-    background: var(--soft); border: 1px solid transparent; border-radius: 12px;
+    background: var(--soft); border: 1px solid transparent; border-radius: 8px;
   }
   form.holding input:focus { outline: none; border-color: var(--sand); }
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-    height: 40px; padding: 0 18px; border: 0; border-radius: 999px; cursor: pointer;
+    height: 40px; padding: 0 18px; border: 0; border-radius: 8px; cursor: pointer;
     background: var(--accent); color: var(--bg); font: 500 13.5px var(--sans); white-space: nowrap;
   }
   .btn:hover { background: color-mix(in srgb, var(--accent) 84%, var(--bg)); }
@@ -613,7 +610,7 @@
   .btn.ghost:hover { color: var(--ink); }
   /* Buttons are only disabled while their request runs. */
   .btn:disabled { opacity: .5; cursor: progress; }
-  .rowbtn { background: none; border: 0; border-radius: 999px; cursor: pointer;
+  .rowbtn { background: none; border: 0; border-radius: 6px; cursor: pointer;
             padding: 3px 10px; color: var(--ink-faint); font: 500 12.5px/20px var(--sans); }
   .rowbtn:hover { background: var(--soft); color: var(--ink); }
   /* × on a row entered by hand, in space every date cell reserves, so dates
@@ -639,7 +636,7 @@
     position: fixed; z-index: 60; top: calc(var(--bar) + 14px); right: 14px; bottom: 14px;
     width: min(440px, calc(100vw - 28px));
     display: flex; flex-direction: column; overflow: hidden;
-    background: var(--panel); border-radius: 24px; box-shadow: var(--shadow-pop);
+    background: var(--panel); border-radius: 16px; box-shadow: var(--shadow), var(--shadow-pop);
     visibility: hidden; opacity: 0; transform: translateX(16px);
     transition: opacity .18s ease, transform .18s ease, visibility 0s .18s;
   }
@@ -651,11 +648,8 @@
   #agent.full .turn, #agent.full .agent-head, #agent.full #agentForm {
     width: calc(100% - 24px); max-width: 820px; margin-inline: auto;
   }
-  /* The spectrum along the top edge. */
-  #agent::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px;
-                   background: var(--spectrum); }
   .agent-head { flex: none; display: flex; align-items: center; gap: 2px; padding: 16px 12px 8px 22px; }
-  .agent-head h2 { margin: 0 auto 0 0; font: 600 18px/1.2 var(--display); }
+  .agent-head h2 { margin: 0 auto 0 0; font: 500 18px/1.2 var(--display); }
   #agentFull .shrink, #agent.full #agentFull .grow { display: none; }
   #agent.full #agentFull .shrink { display: block; }
   /* The conversation. A scroll that reaches its end stops there, rather than
@@ -667,11 +661,11 @@
   #agentLog:not(:empty) + .agent-empty { display: none; }
   .agent-empty { flex: 1; display: grid; align-content: center; gap: 8px; padding: 24px 36px;
                  text-align: center; color: var(--ink-faint); font-size: 13.5px; }
-  .agent-empty strong { font: 600 21px/1.25 var(--display); color: var(--ink); }
+  .agent-empty strong { font: 500 21px/1.25 var(--display); color: var(--ink); }
   /* The box you type in, with its buttons riding the bottom edge, so they
      stay level with the last line as the box grows. */
   #agentForm { flex: none; display: flex; align-items: flex-end; gap: 8px; margin: 0 12px 12px;
-               padding: 4px 4px 4px 16px; border-radius: 22px; background: var(--soft); }
+               padding: 4px 4px 4px 16px; border-radius: 12px; background: var(--soft); }
   #agentForm:focus-within { box-shadow: inset 0 0 0 1.5px var(--sand); }
   #agentInput {
     flex: 1; min-width: 0; resize: none; overflow-y: auto;
@@ -682,7 +676,7 @@
   .agent-controls { flex: none; display: flex; align-items: center; gap: 6px; height: 36px; }
   #agentSpin { margin: 0 6px; }
   #agentSend, #agentStop {
-    height: 32px; padding: 0 14px; border: 0; border-radius: 999px; cursor: pointer;
+    height: 32px; padding: 0 14px; border: 0; border-radius: 8px; cursor: pointer;
     display: inline-flex; align-items: center; font: 500 13px var(--sans);
   }
   #agentSend { background: var(--accent); color: var(--bg); }
@@ -691,15 +685,15 @@
 
   /* One rhythm for the whole conversation: 22px between turns, 10px between
      the parts of a turn, and 3px between the agent's working steps so they
-     read as a single block. Your messages are pink bubbles on the right, so
-     where one turn begins is visible at a glance. */
+     read as a single block. Your messages sit in grey bubbles on the right,
+     so where one turn begins is visible at a glance. */
   .turn + .turn { margin-top: 22px; }
   .turn .you {
     width: fit-content; max-width: 88%; margin-left: auto; padding: 9px 15px;
-    border-radius: 20px 20px 6px 20px; background: var(--pink); color: var(--pink-ink);
+    border-radius: 12px 12px 4px 12px; background: var(--soft); color: var(--ink);
     white-space: pre-wrap; line-height: 1.5;
   }
-  .turn .you.queued { background: var(--soft); color: var(--ink-dim); }
+  .turn .you.queued { background: none; box-shadow: var(--shadow); color: var(--ink-dim); }
   .tag-queued { font-size: 11.5px; margin-left: 8px; }
   .turn .steps:not(:empty) { margin-top: 10px; display: grid; gap: 3px; }
   .turn .said:not(:empty) { margin-top: 10px; line-height: 1.6; }
@@ -719,7 +713,7 @@
   .said .md-quote { border-left: 3px solid var(--soft); padding-left: 12px; color: var(--ink-dim); }
   .said .md-hr { border: 0; border-top: 1px solid var(--line); }
   .said .md-code { font: 12px/1.55 var(--mono); color: var(--ink-dim); background: var(--soft);
-                   padding: 10px 12px; border-radius: 12px; overflow-x: auto; white-space: pre; }
+                   padding: 10px 12px; border-radius: 8px; overflow-x: auto; white-space: pre; }
   /* Tables inherit the ledger's rules unless told otherwise: full width, sticky
      uppercase headers, hover fills. None of that belongs in a chat reply. */
   .said .md-table { overflow-x: auto; }
@@ -737,17 +731,19 @@
   .work > summary { color: var(--ink-faint); cursor: pointer; list-style: none; font-size: 12.5px; }
   .work > summary::-webkit-details-marker { display: none; }
   .work > summary:hover { color: var(--ink-dim); }
-  .work pre { margin: 6px 0 2px; padding: 10px 12px; overflow-x: auto; border-radius: 12px;
+  .work pre { margin: 6px 0 2px; padding: 10px 12px; overflow-x: auto; border-radius: 8px;
               background: var(--soft); font: 11.5px/1.5 var(--mono); color: var(--ink-dim); }
   .step { color: var(--ink-faint); font-size: 12.5px; }
-  /* A change the agent wants to make, waiting for your Apply. */
-  .propose { margin-top: 12px; padding: 14px 16px; border-radius: 18px;
-             background: var(--yellow-soft); color: var(--yellow-ink); }
+  /* A change the agent wants to make, waiting for your Apply. An amber dot
+     marks it, like a what-if: nothing has happened yet. */
+  .propose { margin-top: 12px; padding: 14px 16px; border-radius: 12px;
+             background: var(--bg); box-shadow: var(--shadow); }
   .propose h4 { margin: 0 0 4px; font: 600 14px/1.3 var(--sans); }
-  .propose p { margin: 0 0 10px; font-size: 13px; }
+  .propose h4::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 8px;
+                        border-radius: 50%; background: var(--plan); vertical-align: 1px; }
+  .propose p { margin: 0 0 10px; font-size: 13px; color: var(--ink-dim); }
   .propose .work { margin-bottom: 10px; }
-  .propose .work > summary { color: inherit; }
-  .propose .work pre { background: color-mix(in srgb, var(--panel) 70%, transparent); color: inherit; }
+  .propose .work pre { background: var(--panel); }
   .propose .btn { height: 32px; padding: 0 14px; margin-right: 6px; }
   .agent-err, .agent-note { margin-top: 10px; }
   .agent-err { color: var(--loss); font-size: 13px; }
@@ -769,13 +765,13 @@
     nav {
       position: fixed; top: var(--bar); left: 0; bottom: 0; z-index: 58; height: auto;
       width: min(300px, 86vw); padding-top: 14px;
-      background: var(--bg); border-radius: 0 24px 24px 0; box-shadow: var(--shadow-pop);
+      background: var(--bg); border-radius: 0 16px 16px 0; box-shadow: var(--shadow-pop);
       visibility: hidden; transform: translateX(-104%);
       transition: transform .2s ease, visibility 0s .2s;
     }
     body.nav-open nav { visibility: visible; transform: none; transition: transform .2s ease, visibility 0s; }
     body.nav-open .scrim { display: block; position: fixed; inset: var(--bar) 0 0; z-index: 57;
-                           background: rgb(20 21 16 / .2); }
+                           background: rgb(35 35 35 / .2); }
     /* Under the drill-down the layout is inert, drawer included, so the ☰
        that opens it hides. */
     body.locked .menu-btn { visibility: hidden; }
@@ -973,26 +969,16 @@ const hueOf = name => {
   return i < 0 ? null : {i, h: i * 137.508 % 360};
 };
 
-// A category's colour in the charts, swatches and bars: a mid pastel, deep
-// enough to read on the surface. OKLCH, not HSL, so every hue comes out at
-// one lightness; HSL's yellows are far lighter than its blues. Neighbours
-// alternate a step in lightness, so two close hues still differ.
+// A category's colour in the charts, swatches, bars and the dot before its
+// name: a muted mid tone, so the charts stay calm beside the page's black
+// and white. OKLCH, not HSL, so every hue comes out at one lightness; HSL's
+// yellows are far lighter than its blues. Neighbours alternate a step in
+// lightness, so two close hues still differ.
 function colourFor(name) {
   const hue = hueOf(name);
   if (!hue) return css("--neutral");
-  const [even, odd, chroma] = DARK.matches ? [0.68, 0.64, 0.10] : [0.72, 0.68, 0.115];
+  const [even, odd, chroma] = DARK.matches ? [0.68, 0.64, 0.08] : [0.72, 0.68, 0.09];
   return oklch(hue.i % 2 ? odd : even, chroma, hue.h);
-}
-
-// A category's pill, and the drill-down's band: a pale fill with a dark ink
-// of the same hue, or a deep fill with a light ink in dark mode. The ink
-// holds 8:1 on its fill for every hue. Uncategorised gets no style, so it
-// takes the neutral pill.
-function tagStyle(name) {
-  const hue = hueOf(name);
-  if (!hue) return "";
-  const [fill, ink] = DARK.matches ? [[0.34, 0.05], [0.90, 0.06]] : [[0.92, 0.05], [0.36, 0.08]];
-  return `--tag:${oklch(...fill, hue.h)};--tag-ink:${oklch(...ink, hue.h)}`;
 }
 
 // An OKLCH colour as #rrggbb, with Björn Ottosson's OKLab matrices. Chart.js
@@ -1078,7 +1064,7 @@ function totals(rows) {
 const tone = n => n > 0 ? "gain" : n < 0 ? "loss" : "even";
 
 // ---------- sidebar ----------
-// Line icons for the views, on a 16px grid, each on a small tile.
+// Line icons for the views, on a 16px grid.
 const ICONS = {
   all: '<rect x="2" y="2" width="5" height="5" rx="1.5"/><rect x="9" y="2" width="5" height="5" rx="1.5"/>'
     + '<rect x="2" y="9" width="5" height="5" rx="1.5"/><rect x="9" y="9" width="5" height="5" rx="1.5"/>',
@@ -1089,7 +1075,7 @@ const ICONS = {
     + '<path d="M8 10.4c0-2.8 1.7-4.4 4.9-4.4 0 2.8-1.7 4.4-4.9 4.4z"/>',
   rules: '<path d="M2.4 8.3V3.2a.8.8 0 0 1 .8-.8h5.1l5.4 5.4-5.9 5.9z"/><circle cx="5.6" cy="5.6" r="1.1"/>',
 };
-const icon = (key, fill = "") => `<span class="ico${fill && " tone-" + fill}"><svg viewBox="0 0 16 16"
+const icon = key => `<span class="ico"><svg viewBox="0 0 16 16"
     width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"
     stroke-linecap="round" stroke-linejoin="round">${ICONS[key]}</svg></span>`;
 
@@ -1117,7 +1103,7 @@ function renderSidebar() {
   const banks = {};
   for (const a of DATA.accounts) (banks[a.bank] ||= []).push(a);
   const nav = document.getElementById("sidebar");
-  // One item. Every item but a bank account carries an icon tile.
+  // One item. Every item but a bank account carries an icon.
   const item = (id, name, bal, ico = "", title = "") => `<button data-id="${id}"
       aria-current="${state.account === id}"${title && ` title="${title}"`}>${ico}
       <span class="name">${esc(name)}</span>${bal === "" ? "" : `<span class="bal">${bal}</span>`}</button>`;
@@ -1133,14 +1119,14 @@ function renderSidebar() {
   // investments have their own items under Holdings, so they are not counted
   // there too.
   nav.innerHTML = `<div class="brand">Finance Book</div>`
-    + group("", item("all", "All accounts", compact(accountsTotal()), icon("all", "blue"))
-      + item("analysis", "Spending analysis", "", icon("analysis", "coral"))
-      + item("cashflow", "Cashflow", low ? compact(low.amount) : "—", icon("cashflow", "mint"),
+    + group("", item("all", "All accounts", compact(accountsTotal()), icon("all"))
+      + item("analysis", "Spending analysis", "", icon("analysis"))
+      + item("cashflow", "Cashflow", low ? compact(low.amount) : "—", icon("cashflow"),
              "Free cash: the lowest the projection goes in the period"))
     + Object.entries(banks).map(([bank, list]) => group(bank, list.map(a =>
         item(a.id, a.label, a.balance === null ? "—" : compact(a.balance))).join(""))).join("")
-    + group("Holdings", item("holdings", "Term deposits", held("term deposit"), icon("holdings", "yellow"))
-      + item("investments", "Investments", held("investment"), icon("investments", "pink")))
+    + group("Holdings", item("holdings", "Term deposits", held("term deposit"), icon("holdings"))
+      + item("investments", "Investments", held("investment"), icon("investments")))
     + group("Setup", item("rules", "Rules", DATA.rules.length || "add", icon("rules")))
     + `<div class="foot">
         <div>${DATA.real.length.toLocaleString()} transactions across ${DATA.accounts.length} accounts</div>
@@ -1201,30 +1187,30 @@ function renderSummary() {
   // mixes dates. The oldest one says how far behind it can be.
   const oldest = [...DATA.accounts, ...DATA.holdings].map(x => x.as_at).filter(Boolean).sort()[0];
   const first = state.account === "all"
-    ? card("Net worth", money(netWorth()), {fill: "blue", hero: true,
+    ? card("Net worth", money(netWorth()), {hero: true,
         note: byKind.length ? "" : "across every account",
         parts: byKind.length ? [["In accounts", money(balance)],
                                 ...byKind.map(([label, total]) => [label, money(total)])] : [],
         foot: oldest ? "oldest balance as at " + esc(dayLabel(oldest)) : ""})
-    : card("Balance", view[0].balance === null ? "—" : money(view[0].balance), {fill: "blue", hero: true,
+    : card("Balance", view[0].balance === null ? "—" : money(view[0].balance), {hero: true,
         note: view[0].as_at ? "as at " + esc(dayLabel(view[0].as_at)) : ""});
 
   document.getElementById("cards").innerHTML =
     first +
-    card("Money in", money(sum.income), {fill: "mint", note: `${period} · excludes transfers`}) +
-    card("Money out", money(sum.spend), {fill: "coral", note: `${period} · excludes transfers`}) +
+    card("Money in", money(sum.income), {dot: "in-bar", note: `${period} · excludes transfers`}) +
+    card("Money out", money(sum.spend), {dot: "loss", note: `${period} · excludes transfers`}) +
     card("Net", money(sum.net, true), {cls: tone(sum.net), note: `${period} · in minus out`});
   document.getElementById("upload").hidden = state.account !== "all";
 }
 
-// One card in a bento row. `fill` paints it a pastel and `hero` makes it
-// the wide first card. `cls` is gain, loss or even to colour the figure, or
-// text for a name. `parts`
-// are [label, figure] pairs shown side by side under it, and `foot` a last
-// quiet line.
-function card(label, value, {fill = "", hero = false, cls = "", note = "", parts = [], foot = ""} = {}) {
-  return `<div class="card${hero ? " hero" : ""}${fill && " tone-" + fill}">
-      <div class="caption">${label}</div>
+// One card in a row. `hero` makes it the wide first card, and `dot` names
+// the token that colours a dot before its label: in-bar for money in, loss
+// for money out. `cls` is gain, loss or even to colour the figure, or text
+// for a name. `parts` are [label, figure] pairs shown side by side under
+// it, and `foot` a last quiet line.
+function card(label, value, {dot = "", hero = false, cls = "", note = "", parts = [], foot = ""} = {}) {
+  return `<div class="card${hero ? " hero" : ""}">
+      <div class="caption${dot && " dot"}"${dot && ` style="--dot:var(--${dot})"`}>${label}</div>
       <div class="v num ${cls}">${value}</div>
       ${note && `<div class="note">${note}</div>`}
       ${parts.length ? `<div class="parts">${parts.map(([name, figure]) =>
@@ -1245,11 +1231,11 @@ const readUpload = file => new Promise((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 
-// The panel under the title, which stays until it is closed. Its pastel says
-// how it went: mint loaded, yellow waiting on you, coral failed.
-function showPanel(html, fill) {
+// The panel under the title, which stays until it is closed. `status` is
+// ok, wait or fail, and colours the dot by its heading.
+function showPanel(html, status) {
   const panel = document.getElementById("uploadReport");
-  panel.className = "panel report tone-" + fill;
+  panel.className = "panel report " + status;
   panel.innerHTML = `<button class="icon-btn close" type="button" aria-label="Close" title="Close">✕</button>${html}`;
   panel.hidden = false;
   panel.querySelector(".close").onclick = () => { panel.hidden = true; };
@@ -1273,7 +1259,7 @@ async function upload(files, account = null) {
   } catch (e) {
     // A file that could not be read, a refused request, or the server's own
     // error, which says so when the files were saved all the same.
-    showPanel(`<h3>Something went wrong</h3><p>${esc(e.message)}</p>`, "coral");
+    showPanel(`<h3>Something went wrong</h3><p>${esc(e.message)}</p>`, "fail");
   } finally {
     button.disabled = false;
     button.textContent = "Upload statements";
@@ -1306,7 +1292,7 @@ function showReport({status, report}, files) {
     : "The report below says which file and why. A file that fails its checks writes nothing."
       + " An ANZ CSV export skipped for its account can be uploaded on its own to choose it.";
   const panel = showPanel(`<h3>${heading}</h3><p>${note}</p>${ask}<pre>${esc(report)}</pre>`,
-                          status === 0 ? "mint" : status === 4 ? "yellow" : "coral");
+                          status === 0 ? "ok" : status === 4 ? "wait" : "fail");
   const form = panel.querySelector("form");
   if (form) form.onsubmit = event => {
     event.preventDefault();
@@ -1356,9 +1342,9 @@ chartColours();
 // ate a thin bar down to nothing.
 const barStyle = () => ({borderRadius: 6, borderSkipped: false, maxBarThickness: 28,
                          borderColor: css("--panel"), borderWidth: {top: 1.5}});
-// Every line is the one blue, with a soft wash under it and a dot only under
-// the pointer.
-const lineStyle = () => ({borderColor: css("--line-chart"), backgroundColor: css("--line-chart") + "1f",
+// Every line is the ink colour, with a faint wash under it and a dot only
+// under the pointer.
+const lineStyle = () => ({borderColor: css("--line-chart"), backgroundColor: css("--line-chart") + "0f",
                           fill: true, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5, tension: 0.3});
 // The stylesheet follows a switch between light and dark by itself. The
 // charts and the category fills take colours from the script, so they are
@@ -1621,7 +1607,7 @@ function tableBody(rows, {column, hideCategory}) {
           : t.provisional
           ? `<span class="tag pending" title="The bank has not confirmed this row yet, so it may still change.">provisional</span> `
           : ""}<span class="tag ${cls}" data-edit="type">${esc(t.type)}</span>${t.category && !hideCategory
-          ? ` <span class="tag cat" title="${esc(t.category)}" style="${tagStyle(t.category)}">${esc(t.category)}</span>` : ""}</td>
+          ? ` <span class="tag cat" title="${esc(t.category)}" style="--dot:${colourFor(t.category)}">${esc(t.category)}</span>` : ""}</td>
       <td class="r amt num ${cls}"${t.manual ? ' data-edit="amount"' : ""}>${money(t.amount, true)}</td>
       ${last}
     </tr>`;
@@ -2147,7 +2133,6 @@ function renderDrill(rows, spent, days) {
   const catRows = rows.filter(t => catOf(t) === name);
   const share = (100 * catRows.reduce((n, t) => n - t.amount, 0) / (spent || 1)).toFixed(1);
 
-  panel.querySelector(".drill-head").style.cssText = tagStyle(name);
   document.getElementById("drillName").innerHTML =
     `<span class="swatch" style="background:${colourFor(name)};width:12px;height:12px"></span>${serifText(name)}`;
   // A ticked-off category is not in the total, so it has no share of it. The
@@ -2550,8 +2535,8 @@ function overviewBody(rows, ranked, spent, days, listed, {income, deposits, net}
 
   return `
     <div class="cards">
-      ${card("Total spent", money(spent), {fill: "coral", hero: true, note: plural(rows.length, "transaction")})}
-      ${card("Income", money(income), {fill: "mint", note: plural(deposits, "deposit")})}
+      ${card("Total spent", money(spent), {dot: "loss", hero: true, note: plural(rows.length, "transaction")})}
+      ${card("Income", money(income), {dot: "in-bar", note: plural(deposits, "deposit")})}
       ${card("Net", money(net, true), {cls: tone(net), note: netNote})}
       ${card("Per day", money(Math.round(spent / days)), {note: `over ${plural(Math.round(days), "day")}`})}
       ${card("Per month", money(Math.round(spent / days * 30.44)), {note: "average"})}
@@ -2599,7 +2584,7 @@ function drillBody(name, rows, days) {
 
   return `
     <div class="cards">
-      ${card("Spent here", money(total), {fill: "coral", hero: true, note: plural(rows.length, "transaction")})}
+      ${card("Spent here", money(total), {hero: true, note: plural(rows.length, "transaction")})}
       ${card("Per month", money(Math.round(total / days * 30.44)),
              {note: `average over ${plural(Math.round(days), "day")}`})}
       ${card("Typical", money(middle), {note: "middle transaction"})}
@@ -2803,14 +2788,14 @@ function renderCashflow() {
   // shortfall.
   const body = `
     <div class="cards">
-      ${card("Free cash", low ? money(low.amount) : "—", {fill: "blue", hero: true,
+      ${card("Free cash", low ? money(low.amount) : "—", {hero: true,
              cls: low && low.amount < 0 ? "loss" : "",
              note: !low ? "the period ends before today"
                    : low.day === today ? "now, and no plan takes it lower" : `lowest on ${dayLabel(low.day)}`})}
       ${card("In accounts now", money(accountsTotal()), {note: "term deposits and investments left out"})}
       ${card("End of period", money(end), {cls: tone(end), note: dayLabel(to)})}
-      ${card("Planned in", money(planned.in), {fill: "mint", note: `in the projection to ${dayLabel(to)}`})}
-      ${card("Planned out", money(planned.out), {fill: "coral", note: `in the projection to ${dayLabel(to)}`})}
+      ${card("Planned in", money(planned.in), {dot: "in-bar", note: `in the projection to ${dayLabel(to)}`})}
+      ${card("Planned out", money(planned.out), {dot: "loss", note: `in the projection to ${dayLabel(to)}`})}
     </div>
     <div class="panel">
       <h3>Free cash, day by day</h3>
@@ -2874,7 +2859,7 @@ function renderRules() {
     // they go in a span the stylesheet can shade.
     const pattern = esc(r.pattern).replace(/\s+$/, space => `<span class="trail">${space}</span>`);
     return `<tr>
-      <td><span class="tag" title="${esc(r.category)}" style="${tagStyle(r.category)}">${esc(r.category)}</span></td>
+      <td><span class="tag cat" title="${esc(r.category)}" style="--dot:${colourFor(r.category)}">${esc(r.category)}</span></td>
       <td><code>${pattern}</code></td>
       <td class="r num" data-hits="${r.id}">…</td>
       <td class="r amt num ${total < 0 ? "out" : "in"}">${money(total)}</td>
