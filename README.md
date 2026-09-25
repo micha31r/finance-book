@@ -19,6 +19,10 @@ python3 -m venv .venv
 
 ## Load statements
 
+On the page, open All accounts and click Upload statements. Pick any mix of
+PDFs and CSVs. Each file is identified by reading it, checked, then loaded,
+and the page shows the report. From a terminal:
+
 ```sh
 cd backend
 ../.venv/bin/python ingest.py            # prompts, drag files from Finder

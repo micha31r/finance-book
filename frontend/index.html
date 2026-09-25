@@ -155,6 +155,14 @@
   .title { display: flex; align-items: baseline; gap: 10px; margin-bottom: var(--gap); }
   .title h2 { margin: 0; font-size: 24px; letter-spacing: -0.03em; }
   .title .sub { color: var(--ink-dim); font-size: 13px; }
+  .title .btn { margin-left: auto; align-self: center; }
+  /* What ingest.py said about an upload, in its own fixed-width columns. */
+  .report .close { float: right; }
+  .report form { display: flex; gap: 8px; margin-bottom: 12px; }
+  .report select { height: 38px; padding: 0 9px; font: inherit; color: var(--ink);
+                   background: var(--bg); border: 0; border-radius: 0; }
+  .report pre { margin: 0; max-height: 360px; overflow: auto; font-family: var(--mono);
+                font-size: 12px; color: var(--ink-dim); }
 
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
            gap: var(--gap); margin: var(--gap) 0; }
@@ -721,7 +729,11 @@
     <div class="title">
       <h2 id="viewName">—</h2>
       <span class="sub" id="viewSub"></span>
+      <!-- On All accounts only. The server works out what each file is. -->
+      <button class="btn" id="upload" type="button" hidden>Upload statements</button>
+      <input type="file" id="uploadFiles" multiple accept=".pdf,.csv" hidden>
     </div>
+    <div class="panel report" id="uploadReport" hidden></div>
 
     <div class="cards" id="cards"></div>
 
@@ -1045,6 +1057,96 @@ function renderSummary() {
     card("Money in", money(sum.income), "in", `${period} · excludes transfers`) +
     card("Money out", money(sum.spend), "out", `${period} · excludes transfers`) +
     card("Net", money(sum.net, true), tone(sum.net), `${period} · in minus out`);
+  document.getElementById("upload").hidden = state.account !== "all";
+}
+
+// ---------- uploading statements ----------
+// The files go to ingest.py through the server, all in one run, as the command
+// line takes them: a Westpac accounts file checks the exports beside it, and
+// transfers pair across every file.
+const readUpload = file => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  // A data URL is "data:<type>;base64,<data>", and the server wants the data.
+  reader.onload = () => resolve({name: file.name, data: reader.result.split(",")[1]});
+  reader.onerror = () => reject(reader.error);
+  reader.readAsDataURL(file);
+});
+
+// The panel under the title, which stays until it is closed.
+function showPanel(html) {
+  const panel = document.getElementById("uploadReport");
+  panel.innerHTML = `<button class="rowbtn close" type="button">close</button>${html}`;
+  panel.hidden = false;
+  panel.querySelector(".close").onclick = () => { panel.hidden = true; };
+  return panel;
+}
+
+async function upload(files, account = null) {
+  const button = document.getElementById("upload");
+  button.disabled = true;
+  button.textContent = "Loading…";
+  try {
+    const answer = await request("/api/ingest", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({files: await Promise.all(files.map(readUpload)), account}),
+    });
+    // The files are in by now, so a failed refresh must not hide the report.
+    await reload().catch(e => {
+      answer.report += `\n\nThe page could not refresh (${e.message}). Reload it.`;
+    });
+    showReport(answer, files);
+  } catch (e) {
+    // A file that could not be read, a refused request, or the server's own
+    // error, which says so when the files were saved all the same.
+    showPanel(`<h3>Something went wrong</h3><p>${esc(e.message)}</p>`);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Upload statements";
+  }
+}
+
+// `status` is ingest.py's exit code: 0 when every file loaded, 4 when all that
+// is missing is an ANZ CSV export's account, and anything else when a file did
+// not load.
+function showReport({status, report}, files) {
+  const csvs = files.filter(f => /\.csv$/i.test(f.name));
+  const anz = DATA.accounts.filter(a => a.bank === "ANZ");
+  const heading = status === 0 ? "Files loaded"
+    : status === 4 ? "Which account is this export?" : "Not everything loaded";
+  // An ANZ CSV export carries no account number. The one file is sent again
+  // with the account picked. Nothing is picked to start with, so a stray click
+  // cannot file it under the wrong account. With several files, the page
+  // cannot tell which one ingest.py skipped, and one answer for all could.
+  const known = "a PDF statement of its account first, so the account is known.";
+  const ask = status !== 4 ? ""
+    : csvs.length > 1 ? "<p>Upload each ANZ CSV export on its own to choose its account.</p>"
+    : !anz.length ? `<p>Load ${known}</p>`
+    : `<form><select name="account" required aria-label="Account">
+        <option value="">Choose its account</option>${anz.map(a =>
+          `<option value="${esc(a.number)}">${esc(a.label)} · ${esc(a.bsb ? a.bsb + "-" : "")}${esc(a.number)}</option>`)
+          .join("")}</select><button class="btn" type="submit">Load it</button></form>
+      <p>Not listed? Load ${known}</p>`;
+  const note = status === 0 ? "The report below is what was checked and written."
+    : status === 4 ? "An ANZ CSV export has no account number, and too few of its rows are known to tell."
+    : "The report below says which file and why. A file that fails its checks writes nothing."
+      + " An ANZ CSV export skipped for its account can be uploaded on its own to choose it.";
+  const panel = showPanel(`<h3>${heading}</h3><p>${note}</p>${ask}<pre>${esc(report)}</pre>`);
+  const form = panel.querySelector("form");
+  if (form) form.onsubmit = event => {
+    event.preventDefault();
+    upload(csvs, form.account.value);
+  };
+}
+
+function wireUpload() {
+  const input = document.getElementById("uploadFiles");
+  document.getElementById("upload").onclick = () => input.click();
+  input.onchange = () => {
+    const files = [...input.files];
+    // Cleared, so choosing the same files again still counts as a change.
+    input.value = "";
+    if (files.length) upload(files);
+  };
 }
 
 // ---------- charts ----------
@@ -3386,6 +3488,7 @@ fetch("data.json", {cache: "no-store"})
     readUrl();          // needs DATA, to check the account in ?view= still exists
     render();
     wireAgent();
+    wireUpload();
   })
   .catch(e => {
     document.querySelector("main").innerHTML =

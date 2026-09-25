@@ -25,7 +25,8 @@ be `.pdf` or `.csv`. Mixed banks and formats in one run are fine.
 
 An ANZ CSV export contains no account number. If enough of its rows are already
 in the database it is matched automatically. Otherwise you are asked once which
-account it belongs to.
+account it belongs to, or you name it with `--account 123456789` on that one
+file. The page's Upload button asks with a list of your ANZ accounts.
 
 ## Supported
 
@@ -53,8 +54,9 @@ A source is only held to the checks it supports. An ANZ CSV export has no
 balance column, so its rows are stored with `verified = 0` rather than being
 refused. The balance-anchored gap check below is what earns them their trust.
 
-`ingest.py` exits 1 when any file was rejected, not recognised or skipped, so a
-script can tell.
+`ingest.py` exits 1 when any file was rejected or not recognised. It exits 4
+when the only thing left out is an ANZ CSV export whose account could not be
+told. So a script can tell, and the page knows when to ask for the account.
 
 ## Checks reported after loading
 

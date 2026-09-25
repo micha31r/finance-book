@@ -5,12 +5,14 @@ Exports fresh JSON from backend/finance.db every time it starts, so the page
 never shows stale numbers, then serves frontend/ on localhost.
 """
 import argparse
+import base64
 import calendar
 import http.server
 import json
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import threading
 import uuid
 import webbrowser
@@ -29,6 +31,9 @@ import reconcile
 
 # In bytes. Questions, rules, holdings and SQL changes are all far smaller.
 MAX_BODY = 1_000_000
+# Uploaded statements arrive as base64, a third larger than the files. A
+# statement PDF is well under 1 MB, so this takes a few years of them at once.
+MAX_UPLOAD = 100_000_000
 
 # Two saves close together each rebuild data.json. Run one export at a time, so
 # the file left on disk always comes from the newest database.
@@ -441,6 +446,7 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         POST   /api/chat            one turn of the agent, as server-sent events
         POST   /api/stop            cancel a turn
         POST   /api/apply           run a change the agent proposed and you approved
+        POST   /api/ingest          load statements and exports sent from the page
 
     A holding is money no statement covers, like a term deposit or a Sharesies
     balance, so it is typed in. A bank row can be renamed, retyped and given a
@@ -509,15 +515,15 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _body(self):
+    def _body(self, limit=MAX_BODY):
         """The JSON object a POST carries, or None once an error has been sent."""
         length = self.headers.get("Content-Length", "")
         if not length.isdecimal():
             self._send({"error": "Content-Length missing or invalid"}, 400)
             return None
         # Compare lengths first: int() refuses strings over 4,300 digits.
-        if len(length) > len(str(MAX_BODY)) or int(length) > MAX_BODY:
-            self._send({"error": "request body over 1 MB"}, 413)
+        if len(length) > len(str(limit)) or int(length) > limit:
+            self._send({"error": f"request body over {limit // 1_000_000} MB"}, 413)
             return None
         try:
             item = json.loads(self.rfile.read(int(length)))
@@ -572,6 +578,49 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         elif export.returncode:
             return self._send({"error": f"Saved, but data.json was not rebuilt: {output}"}, 500)
         return self._send(payload)
+
+    def _ingest(self, item):
+        """Load statements sent from the page with ingest.py, then rebuild data.json.
+
+        Every POST must be JSON (see parse_request), so each file arrives as
+        {"name", "data"} with its bytes in base64. ingest.py works out what
+        each one is from its contents. It names files in its report, so each
+        keeps its name, in a folder of its own in case two share one.
+
+        `account` answers ingest.py's question for an ANZ CSV export whose
+        rows cannot tell it which account it is. The answer carries ingest's
+        exit code and its report: 4 means an export needs that answer.
+        """
+        files, account = item.get("files"), item.get("account")
+        if not isinstance(files, list) or not files or not all(
+                isinstance(f, dict) and isinstance(f.get("name"), str)
+                and isinstance(f.get("data"), str) for f in files):
+            return self._send({"error": "files must be a list of {name, data}, data in base64"}, 400)
+        if account is not None and not isinstance(account, str):
+            return self._send({"error": "account must be an account number or null"}, 400)
+        with tempfile.TemporaryDirectory() as folder:
+            paths = []
+            for n, upload in enumerate(files):
+                name = Path(upload["name"]).name      # no folders: "../x.pdf" is x.pdf
+                if name in ("", ".", "..") or "\0" in name:
+                    return self._send({"error": f"not a file name: {upload['name']!r}"}, 400)
+                try:
+                    data = base64.b64decode(upload["data"], validate=True)
+                except ValueError:
+                    return self._send({"error": f"{name} did not arrive as base64"}, 400)
+                path = Path(folder, str(n), name)
+                path.parent.mkdir()
+                path.write_bytes(data)
+                paths.append(str(path))
+            # With = so an account like "-h" cannot read as an option. stdin is
+            # not the terminal serve.py runs in, or ingest.py would ask its
+            # question there and wait for an answer that never comes.
+            result = subprocess.run(
+                [sys.executable, "ingest.py", *([f"--account={account}"] if account else []), *paths],
+                cwd=ROOT / "backend", stdin=subprocess.DEVNULL, capture_output=True, text=True)
+        # Some files may have loaded even when others did not.
+        return self._rebuild_then_send({"status": result.returncode,
+                                        "report": (result.stdout + result.stderr).strip()})
 
     def _chat(self, item):
         """Stream one turn of the agent as server-sent events.
@@ -651,11 +700,13 @@ class QuietHandler(http.server.SimpleHTTPRequestHandler):
         if path.startswith("/api/txn/"):                # /api/txn/<id> changes one row
             path, txn_id = "/api/txn/", path[len("/api/txn/"):]
         if path not in ("/api/holdings", "/api/rules", "/api/chat", "/api/apply", "/api/stop",
-                        "/api/txn", "/api/txn/"):
+                        "/api/txn", "/api/txn/", "/api/ingest"):
             return self.send_error(404)
-        item = self._body()
+        item = self._body(MAX_UPLOAD if path == "/api/ingest" else MAX_BODY)
         if item is None:
             return
+        if path == "/api/ingest":
+            return self._ingest(item)
         if path == "/api/txn":
             return self._write(add_txn, item)
         if path == "/api/txn/":

@@ -7,6 +7,11 @@ name, because the ANZ PDFs arrive named like
 
     python ingest.py                 # prompts for paths
     python ingest.py FILE [FILE...]
+    python ingest.py --account 123456789 export.csv
+
+It exits 1 when any file could not be loaded. It exits 4 when the only thing
+left out is an ANZ CSV export whose account could not be told: run it again on
+that file with --account. The page's Upload button reads these codes.
 """
 import argparse
 import shlex
@@ -52,11 +57,24 @@ def read_paths():
     return [Path(p) for p in shlex.split(line)]
 
 
-def resolve_account(conn, doc):
+def anz_number(text):
+    """An ANZ account number with its dashes and spaces taken out, or ValueError.
+
+    ANZ prints them as 1234-56789. Anything else, like a mistyped choice, would
+    quietly create an account that isn't yours.
+    """
+    number = text.replace("-", "").replace(" ", "")
+    if len(number) != 9 or not number.isdigit():
+        raise ValueError(f"{text!r} is not a 9-digit account number")
+    return number
+
+
+def resolve_account(conn, doc, given=None):
     """Give an ANZ CSV export an account.
 
     The export carries no account number. If its rows already exist we can say
-    which account it is; otherwise the only honest answer is to ask.
+    which account it is; otherwise the only honest answer is to ask, or to
+    take `given`, the answer from the command line.
     """
     if doc.number:
         return True
@@ -83,6 +101,11 @@ def resolve_account(conn, doc):
               f"next best {runner_up})")
         return True
 
+    if given:
+        doc.number = given
+        doc.bsb = doc.bsb or next((a["bsb"] for a in candidates if a["number"] == given), None)
+        print(f"    account given: {given}")
+        return True
     if not sys.stdin.isatty():
         print(f"    SKIPPED {doc.source_name}: cannot tell which account this is "
               f"(best overlap {best} rows, need {MIN_OVERLAP})")
@@ -98,12 +121,11 @@ def resolve_account(conn, doc):
             doc.number = candidates[int(choice) - 1]["number"]
             doc.bsb = doc.bsb or candidates[int(choice) - 1]["bsb"]
             return True
-        # ANZ prints account numbers as 1234-56789. Anything else, like a
-        # mistyped choice, would quietly create an account that isn't yours.
-        number = choice.replace("-", "").replace(" ", "")
-        if len(number) == 9 and number.isdigit():
-            doc.number = number
+        try:
+            doc.number = anz_number(choice)
             return True
+        except ValueError:
+            pass
         if not choice:
             print(f"    SKIPPED {doc.source_name}")
             return False
@@ -115,12 +137,20 @@ def main(argv):
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
     cli.add_argument("files", nargs="*", type=Path,
                      help="statements and exports; prompts for them when none are given")
-    paths = cli.parse_args(argv).files or read_paths()
+    cli.add_argument("--account", type=anz_number,
+                     help="the account an ANZ CSV export belongs to, when too few of its rows"
+                          " are known to tell. Otherwise you are asked.")
+    args = cli.parse_args(argv)
+    paths = args.files or read_paths()
+    # One answer for several exports would file them all under one account.
+    if args.account and len(paths) != 1:
+        cli.error("--account takes exactly one file, the export it names")
     if not paths:
         print("nothing to do")
         return 0
 
     status = 0          # 1 once any file could not be loaded
+    unplaced = False    # an export skipped because its account is unknown
     documents = []
     print("\n  detected")
     for file_no, path in enumerate(paths):
@@ -174,8 +204,8 @@ def main(argv):
     # are told apart by their place in this run, because two can share a name.
     failed = {file_no for file_no, _, problems, _, _ in checked if problems}
     for file_no, doc, problems, verified, matched_days in checked:
-        if not resolve_account(conn, doc):
-            status = 1
+        if not resolve_account(conn, doc, args.account):
+            unplaced = True
             continue
         label = (f"  {doc.bank} {doc.number} {doc.kind}"
                  f"{f' #{doc.statement_no}' if doc.statement_no else ''} "
@@ -241,7 +271,9 @@ def main(argv):
     if pending:
         print(f"\n  {len(pending)} cross-bank candidate(s) need review: run `python review.py`")
     conn.close()
-    return status
+    # 4 only when the account is all that is missing, so asking for it never
+    # hides a file that failed.
+    return 4 if unplaced and status == 0 else status
 
 
 if __name__ == "__main__":
