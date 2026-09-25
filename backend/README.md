@@ -100,7 +100,7 @@ sets the version.
 
 ## Entered by hand
 
-The page adds rows to a ledger table with "+ add", and edits a cell when you
+The page adds rows to a ledger table with "+ Add", and edits a cell when you
 double-click it. Every account gets one `manual` document for the rows you
 enter by hand. A what-if (`whatif = 1`) is a plan. The page tags it, counts it
 apart in the sidebar footer, where you can hide them, and leaves it out of

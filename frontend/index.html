@@ -5,174 +5,284 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<!-- Fraunces comes with its soft axis fixed at 100 and its wonky one off: the
+     rounded, friendly cut, with nothing to set in the styles. A setting there
+     was undone by every `font:` shorthand. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,400..700,100,0&family=Geist:wght@400..600&family=Geist+Mono:wght@400..500&display=swap">
 <title>Finance Book</title>
 <!-- No icon. Saying so stops the browser asking for one and logging a 404. -->
 <link rel="icon" href="data:,">
 <style>
-  /* Neutral greys, flat fills, zero radius, bold figures, mono numbers in
-     tables and uppercase labels. Dark by default, light when the system is
-     set to light.
+  /* Calm and soft: a warm off-white ground, white surfaces, pastel cards, a
+     soft serif for titles and big figures, rounded corners everywhere. Light
+     by default, dark when the system is set to dark.
 
-     Surfaces are told apart by fill, not by borders: cards, panels and tables
-     sit one step lighter than the ground. Lines are left only where rows need
-     them.
-
-     In the chrome, colour always means something. The ink colour, white on
-     dark and black on light, marks the current item and the primary action.
-     Green is money in, red is money out where it is shown, and amber is a
-     what-if. Everything else is grey. Categories are the exception: each gets
-     its own hue, so dozens can be told apart. */
+     Colour means something. Blue is what you hold, mint is money in, coral is
+     money out, yellow is a what-if or a tip, and pink is the chat. Each
+     pastel comes with a dark ink of its own hue for text on it. In the
+     transaction tables spending is red and money in green, as on a bank
+     statement. Two exceptions: each category gets its own hue, so dozens can
+     be told apart, and the sidebar's icon tiles only tell the views apart. */
   :root {
-    color-scheme: dark;
-    --bg: #0c0c0e;          /* ground */
-    --panel: #18181b;       /* surface: cards, panels, tables */
-    --line: #2c2c31;        /* hairline rules, where a line is still needed */
-    --line-soft: #202024;   /* progress track, chat rules */
-    --rule: #232327;        /* table row rule */
-    --hover: #26262b;       /* row hover, and the fill of a control on a surface */
-    --ink: #f4f4f5;
-    --ink-dim: #b8b8c0;
-    --ink-faint: #909099;
-    --in: #3ddc84;          /* money in, positive */
-    --out: var(--ink);      /* money out stays plain ink */
-    --move: var(--ink-faint); /* transfers stay grey */
-    --loss: #ff5c5c;        /* spending in the transaction tables, a negative net */
-    --plan: #f5b544;        /* a what-if: a plan you typed in, not a bank row */
-    /* Text on an accent fill is --bg. */
-    --accent: var(--ink);   /* current item, primary action */
-    --accent-dim: #3a3a40;  /* text selection */
-    /* The category fills are made in the script: colourFor. */
-    --gap: 14px;           /* one spacing step, horizontal and vertical */
-    --bar: 38px;           /* the chat bar's one-line height; the page sits below it */
-    --control: 22px;       /* the chat bar's Send and Stop buttons */
-    /* The only gradient in the app. It marks the surface where you are
-       talking to a model rather than reading your own books, and it only
-       appears while that surface has your attention. */
-    --spectrum: linear-gradient(90deg, #b5abfc, #7cc7fb, #5eead4,
-                                #fbbf24, #f472b6, #a78bfa, #b5abfc);
-    --display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-    --sans: "IBM Plex Sans", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
-    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-    scrollbar-color: var(--line) transparent;   /* a quiet thumb on a clear track */
+    color-scheme: light;
+    --bg: #f1f2ee;          /* ground */
+    --panel: #ffffff;       /* surface: tables, charts, forms */
+    --soft: #e8eae2;        /* chips, inputs, hover on the ground */
+    --line: #e3e4dd;        /* hairlines: column heads, chart gridlines */
+    --rule: #efefea;        /* table row rule */
+    --hover: #f6f6f2;       /* row hover on a surface */
+    --ink: #141510;
+    --ink-dim: #45463f;     /* secondary text, and any text on --soft */
+    --ink-faint: #676960;   /* captions and notes; 4.5:1 even on --soft */
+    --in: #1e7546;          /* money in */
+    --out: var(--ink);      /* money out, outside the transaction tables */
+    --move: var(--ink-faint);   /* transfers stay grey */
+    --loss: #af3c3a;        /* spending in the tables, and a negative verdict */
+    --plan: #915c08;        /* a what-if: a plan you typed in, not a bank row */
+    --accent: var(--ink);   /* primary buttons; their text is --bg */
+    --focus: #3a75af;
+    --neutral: #a9aaa0;     /* what has no category: Out bars, Uncategorised; the switch when off */
+    --line-chart: #386ca0;  /* the balance and cashflow lines */
+    --in-bar: #5bbb8c;      /* income with no category, in the charts */
+    /* The pastels. -ink is the text on each, and -soft a paler fill for the
+       pills in the tables and the tip cards. */
+    --blue: #b5d5f4;   --blue-ink: #0f253b;
+    --mint: #b0e6c8;   --mint-ink: #0b2e1e;   --mint-soft: #d2f5e1;
+    --coral: #f9b59f;  --coral-ink: #3c180f;  --coral-soft: #ffded3;
+    --yellow: #f5df8d; --yellow-ink: #2f2107; --yellow-soft: #fdf1c3;
+    --pink: #f6cedf;   --pink-ink: #361927;
+    /* The four pastels in a row. It marks the surface where you talk to a
+       model rather than read your own books. */
+    --spectrum: linear-gradient(90deg, var(--yellow), var(--blue), var(--pink), var(--coral));
+    --shadow: 0 1px 2px rgb(20 21 16 / .06), 0 2px 8px rgb(20 21 16 / .04);
+    --shadow-pop: 0 4px 12px rgb(20 21 16 / .08), 0 24px 64px rgb(20 21 16 / .16);
+    --display: "Fraunces", ui-serif, Georgia, serif;
+    --sans: "Geist", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+    --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --gap: 16px;            /* one spacing step, horizontal and vertical */
+    --bar: 60px;            /* the top bar; the page sits below it */
+    --side: 248px;          /* the sidebar */
+    --radius: 20px;         /* cards, panels, tables */
+    --drill-head: 76px;     /* the drill-down's band, which its table heads stick under */
+    scrollbar-color: #cfd0c8 transparent;   /* a quiet thumb on a clear track */
   }
-  /* The same roles on a pale grey ground with white surfaces. Green, red and
-     amber are deeper, so as text and as badge fills they still hold 4.5:1,
-     on a hovered row too. */
-  @media (prefers-color-scheme: light) {
+  /* The same roles on a warm near-black. The pastels turn into deep tints
+     with a light ink, and every text colour still holds 4.5:1. */
+  @media (prefers-color-scheme: dark) {
     :root {
-      color-scheme: light;
-      --bg: #f2f2f4;
-      --panel: #ffffff;
-      --line: #dedee3;
-      --line-soft: #ebebef;
-      --rule: #efeff2;
-      --hover: #e6e6ea;
-      --ink: #0c0c0e;
-      --ink-dim: #45454d;
-      --ink-faint: #65656e;
-      --in: #08763e;
-      --loss: #c4212b;
-      --plan: #935600;
-      --accent-dim: #d4d4da;
-      /* The same hues, deep enough to show at 3:1 on the pale ground. */
-      --spectrum: linear-gradient(90deg, #8c81cf, #4893c4, #009e8a,
-                                  #bb8100, #dd5da2, #967ae7, #8c81cf);
+      color-scheme: dark;
+      --bg: #131410;
+      --panel: #1d1e18;
+      --soft: #2a2b24;
+      --line: #34352d;
+      --rule: #26271f;
+      --hover: #23241d;
+      --ink: #f1f2ee;
+      --ink-dim: #c9cabf;
+      --ink-faint: #9d9e92;
+      --in: #73ce95;
+      --loss: #f07f77;
+      --plan: #e5bf6d;
+      --focus: #8bbcef;
+      --neutral: #55564e;
+      --line-chart: #8bbcef;
+      --in-bar: #5cab83;
+      --blue: #23374c;   --blue-ink: #d1e7ff;
+      --mint: #1c3d2c;   --mint-ink: #c9efd9;   --mint-soft: #1b3427;
+      --coral: #522c20;  --coral-ink: #ffdacd;  --coral-soft: #44281f;
+      --yellow: #45391a; --yellow-ink: #f6e8b3; --yellow-soft: #3c3216;
+      --pink: #492a39;   --pink-ink: #fbdae8;
+      --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 2px 8px rgb(0 0 0 / .2);
+      --shadow-pop: 0 4px 12px rgb(0 0 0 / .4), 0 24px 64px rgb(0 0 0 / .5);
+      scrollbar-color: #45463f transparent;
     }
   }
   * { box-sizing: border-box; }
-  /* The browser's own tick box has round corners and ticks in the system
-     blue, so every tick in the app is drawn here instead. */
+  /* Anything hidden stays hidden, whatever display a rule gives it. */
+  [hidden] { display: none !important; }
+  /* The browser's own tick box ticks in the system blue, so every tick in the
+     app is drawn here instead. */
   input[type="checkbox"] {
     appearance: none; display: grid; place-content: center; flex: none;
-    width: 14px; height: 14px; margin: 0; cursor: pointer;
-    border: 1px solid var(--ink-faint); background: var(--bg);
+    width: 16px; height: 16px; margin: 0; cursor: pointer;
+    border: 1.5px solid var(--ink-faint); border-radius: 5px; background: var(--panel);
   }
-  input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+  input[type="checkbox"]:checked { background: var(--ink); border-color: var(--ink); }
   /* The tick: the left and bottom borders of a small box, turned 45 degrees. */
   input[type="checkbox"]:checked::before {
-    content: ""; width: 7px; height: 3px; margin-top: -2px; color: var(--bg);
-    border: solid; border-width: 0 0 2px 2px; transform: rotate(-45deg);
+    content: ""; width: 8px; height: 4px; margin-top: -2px;
+    border: solid var(--bg); border-width: 0 0 2px 2px; transform: rotate(-45deg);
   }
   /* Other browser defaults, which draw in the system blue or a grey of their
      own. */
   ::placeholder { color: var(--ink-faint); }
-  ::selection { background: var(--accent-dim); color: var(--ink); }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  ::selection { background: var(--yellow); color: var(--yellow-ink); }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   /* Chrome draws the date picker's calendar in its own black or white. The
      same shape cut out of a token colour replaces it. */
   ::-webkit-calendar-picker-indicator {
-    cursor: pointer; background: var(--ink-dim);
-    mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5'><rect x='2' y='3' width='12' height='11'/><path d='M2 7h12M5 1v4M11 1v4'/></svg>") center / 14px no-repeat;
+    cursor: pointer; background: var(--ink-faint);
+    mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.5'><rect x='2' y='3' width='12' height='11' rx='2.5'/><path d='M2 7h12M5 1v4M11 1v4'/></svg>") center / 14px no-repeat;
   }
+  /* Room above anything scrolled into view by the keyboard, so it does not
+     land under the top bar and a stuck table head. The gutter stays when the
+     drill-down takes the scrollbar away, so nothing jumps sideways. */
+  html { scroll-padding-top: calc(var(--bar) + 100px); scrollbar-gutter: stable; }
   body {
     margin: 0; padding-top: var(--bar); background: var(--bg); color: var(--ink);
     font: 14px/1.55 var(--sans);
     -webkit-font-smoothing: antialiased;
   }
-  h2 { font-family: var(--display); font-weight: 700; letter-spacing: -0.035em; }
-  /* Every figure and timestamp is mono, so columns lock. The big card
-     figures are the exception: they sit alone, so they take the display font. */
-  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  /* Tabular figures, so amounts line up in a column. */
+  .num { font-variant-numeric: tabular-nums; }
   .in { color: var(--in); } .out { color: var(--out); } .move { color: var(--move); }
+  .caption { font: 600 11px/1.4 var(--sans); color: var(--ink-faint);
+             text-transform: uppercase; letter-spacing: .14em; }
+  .ink-faint { color: var(--ink-faint); }
 
-  /* ---------- shell ---------- */
-  .caption { font-family: var(--mono); font-size: 11px; color: var(--ink-faint);
-             text-transform: uppercase; letter-spacing: .08em; }
+  /* The pastel fills. A card, panel, nav icon or report takes one of these
+     and paints itself in --tone, writing in --tone-ink. */
+  .tone-blue   { --tone: var(--blue);   --tone-ink: var(--blue-ink); }
+  .tone-mint   { --tone: var(--mint);   --tone-ink: var(--mint-ink); }
+  .tone-coral  { --tone: var(--coral);  --tone-ink: var(--coral-ink); }
+  .tone-yellow { --tone: var(--yellow); --tone-ink: var(--yellow-ink); }
+  .tone-pink   { --tone: var(--pink);   --tone-ink: var(--pink-ink); }
 
-  .layout { display: grid; grid-template-columns: 236px minmax(0, 1fr); align-items: start; }
-  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+  /* ---------- top bar ---------- */
+  /* Fixed on every view and every width. Solid: rows showing through it
+     were noise above a stuck table head. */
+  .topbar {
+    position: fixed; inset: 0 0 auto 0; z-index: 55; height: var(--bar);
+    display: flex; align-items: center; gap: 8px; padding: 0 14px 0 28px;
+    background: var(--bg);
+  }
+  .brand { font: 600 21px/1 var(--display); letter-spacing: -0.01em; white-space: nowrap; }
+  .icon-btn {
+    display: inline-grid; place-items: center; flex: none; width: 34px; height: 34px;
+    padding: 0; border: 0; border-radius: 999px; cursor: pointer;
+    background: none; color: var(--ink-dim);
+  }
+  .icon-btn:hover { background: var(--soft); color: var(--ink); }
+  .menu-btn { display: none; }        /* phones only, below */
+  /* The way into the chat: a white pill edged with the pastel spectrum. */
+  .ask {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 10px;
+    height: 40px; min-width: 272px; padding: 0 7px 0 14px; cursor: pointer;
+    border: 1.5px solid transparent; border-radius: 999px;
+    background: linear-gradient(var(--panel), var(--panel)) padding-box, var(--spectrum) border-box;
+    color: var(--ink-dim); font: 500 13.5px var(--sans); box-shadow: var(--shadow);
+  }
+  .ask:hover, .ask[aria-expanded="true"] { color: var(--ink); }
+  .ask .spark { flex: none; color: var(--pink-ink); }
+  .ask-label { flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  kbd { font: 500 11px/1 var(--sans); padding: 5px 7px; border-radius: 8px;
+        background: var(--soft); color: var(--ink-dim); }
+  /* While the agent works the dots stand in for the shortcut, so a closed
+     panel still says an answer is coming. */
+  .ask .dots { display: none; margin-right: 8px; }
+  .ask.busy .dots { display: inline-flex; }
+  .ask.busy kbd { display: none; }
+  /* Three dots rising in turn: the agent is working. */
+  .dots { display: inline-flex; align-items: center; gap: 3px; color: var(--ink-faint); }
+  .dots i { width: 5px; height: 5px; border-radius: 50%; background: currentColor;
+            animation: dot 1.1s ease-in-out infinite; }
+  .dots i:nth-child(2) { animation-delay: .15s; }
+  .dots i:nth-child(3) { animation-delay: .3s; }
+  @keyframes dot { 0%, 60%, 100% { opacity: .3; transform: none; }
+                   30% { opacity: 1; transform: translateY(-2px); } }
+
+  .layout { display: grid; grid-template-columns: var(--side) minmax(0, 1fr); align-items: start; }
 
   /* ---------- sidebar ---------- */
-  /* Fills the window below the chat bar, so the export stamp sits on the
-     bottom edge. Scrolls on its own if the account list ever outgrows the
-     screen. */
+  /* Sits straight on the page ground. Fills the window below the top bar,
+     so the footer sits on the bottom edge, and scrolls on its own if the
+     account list ever outgrows the screen. */
   nav {
-    padding: 18px 12px;
     position: sticky; top: var(--bar); height: calc(100vh - var(--bar));
-    overflow-y: auto; box-sizing: border-box;
-    /* Column flex so the export stamp can sit on the bottom edge. As a page
-       footer it spanned the full width and pushed the document taller than the
-       window, which is what made the whole page scroll. */
+    overflow-y: auto; padding: 8px 12px 16px 16px;
     display: flex; flex-direction: column;
   }
-  nav .group { margin-bottom: 14px; flex: none; }
-  nav .group > .caption { padding: 0 10px 6px; }
+  nav .group { margin-bottom: 18px; flex: none; }
+  nav .group > .caption { padding: 0 12px 6px; }
   nav button {
-    display: flex; width: 100%; gap: 8px; align-items: baseline; text-align: left;
-    background: none; border: 0; padding: 6px 10px; cursor: pointer;
-    color: var(--ink-dim); font: inherit; font-size: 13px;
+    display: flex; width: 100%; gap: 10px; align-items: center; text-align: left;
+    min-height: 36px; padding: 5px 12px; border: 0; border-radius: 12px; cursor: pointer;
+    background: none; color: var(--ink-dim); font: 450 13.5px/1.3 var(--sans);
   }
-  nav button:hover { background: var(--hover); color: var(--ink); }
-  /* The accent fill marks the current item. */
-  nav button[aria-current="true"] { background: var(--accent); color: var(--bg); }
-  nav button[aria-current="true"] .name { font-weight: 500; }
+  nav button:hover { background: var(--soft); color: var(--ink); }
+  /* The current item is a white pill lifted off the ground. */
+  nav button[aria-current="true"] { background: var(--panel); color: var(--ink);
+                                    font-weight: 550; box-shadow: var(--shadow); }
+  /* The icon tile beside every view that is not a bank account, so the eye
+     finds them first. */
+  nav .ico {
+    display: grid; place-items: center; flex: none; width: 26px; height: 26px; margin-left: -5px;
+    border-radius: 8px; background: var(--tone, var(--soft)); color: var(--tone-ink, var(--ink-dim));
+  }
   nav button .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  nav button .bal { font-size: 12px; opacity: .8; }   /* .75 drops under 4.5:1 on light */
+  nav button .bal { font-size: 12px; color: var(--ink-faint); font-variant-numeric: tabular-nums; }
+  /* margin-top:auto pins this to the bottom when the account list is short,
+     and lets it scroll away with the list when it is long. */
+  nav .foot {
+    margin-top: auto; padding: 14px 12px 0; display: grid; gap: 10px;
+    color: var(--ink-faint); font-size: 12px; line-height: 1.5;
+  }
+  /* The what-if switch. A line in the footer rather than a sidebar item, so
+     it sheds the item styling every other nav button gets. */
+  nav .whatif-toggle { width: auto; min-height: 0; padding: 0; gap: 9px; border-radius: 0;
+                       font-size: 12.5px; color: var(--ink-dim); }
+  nav .whatif-toggle:hover { background: none; color: var(--ink); }
+  .switch { position: relative; flex: none; width: 30px; height: 18px; border-radius: 999px;
+            background: var(--neutral); transition: background .15s; }
+  .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+                   border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .25);
+                   transition: transform .15s; }
+  [aria-checked="true"] > .switch { background: var(--plan); }
+  [aria-checked="true"] > .switch::after { transform: translateX(12px); }
 
   /* ---------- main ---------- */
-  main { padding: 20px 24px 32px; min-width: 0; }
-  .title { display: flex; align-items: baseline; gap: 10px; margin-bottom: var(--gap); }
-  .title h2 { margin: 0; font-size: 24px; letter-spacing: -0.03em; }
-  .title .sub { color: var(--ink-dim); font-size: 13px; }
-  .title .btn { margin-left: auto; align-self: center; }
-  /* What ingest.py said about an upload, in its own fixed-width columns. */
-  .report .close { float: right; }
-  .report form { display: flex; gap: 8px; margin-bottom: 12px; }
-  .report select { height: 38px; padding: 0 9px; font: inherit; color: var(--ink);
-                   background: var(--bg); border: 0; border-radius: 0; }
-  .report pre { margin: 0; max-height: 360px; overflow: auto; font-family: var(--mono);
-                font-size: 12px; color: var(--ink-dim); }
+  main { width: 100%; max-width: 1320px; min-width: 0; justify-self: center; padding: 14px 32px 64px; }
+  /* The title, the line under it, and any action on the right. A grid, so
+     every view's header lines up whatever it holds. */
+  .title { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px;
+           align-items: end; margin: 4px 0 20px; }
+  .title h2 { grid-column: 1; margin: 0; font: 550 34px/1.1 var(--display); letter-spacing: -0.015em; }
+  .title .sub { grid-column: 1; margin-top: 6px; color: var(--ink-faint); font-size: 14px; }
+  .title .btn { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+  /* What ingest.py said about an upload, tinted by how it went. */
+  .report { position: relative; }
+  .report .close { position: absolute; top: 12px; right: 12px; }
+  .report form { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .report select { height: 38px; padding: 0 12px; font: inherit; color: var(--ink);
+                   background: var(--panel); border: 0; border-radius: 12px; }
+  .report pre { margin: 0; max-height: 360px; overflow: auto; padding: 12px 14px; border-radius: 12px;
+                background: color-mix(in srgb, var(--panel) 60%, transparent);
+                font: 12px/1.55 var(--mono); }
 
-  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-           gap: var(--gap); margin: var(--gap) 0; }
-  /* A flat surface block. The figure is the loudest thing on the page, in
-     bold display type. It scales with the card's width, so "+$123,456.78"
-     fits a sixth of the page and still reads large with four cards across. */
-  .card { background: var(--panel); padding: 16px 18px; container-type: inline-size; }
-  .card .v { font-family: var(--display); font-size: clamp(18px, 14cqi, 30px); font-weight: 700;
-             margin-top: 6px; letter-spacing: -0.03em; line-height: 1.2; }
-  .card .note { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); margin-top: 4px; }
+  /* The cards: a bento row. The first card is the hero, twice as wide and
+     toned; the rest share what is left, wrapping as the page narrows, and a
+     card alone on its row stretches across it. */
+  .cards { display: flex; flex-wrap: wrap; gap: var(--gap); margin-bottom: var(--gap); }
+  .card {
+    flex: 1 1 170px; min-width: 0; container-type: inline-size;
+    padding: 18px 20px; border-radius: var(--radius);
+    background: var(--tone, var(--panel)); color: var(--tone-ink, var(--ink));
+  }
+  .card.hero { flex: 2 1 360px; padding: 20px 24px; }
+  .card .caption, .card .note { color: var(--tone-ink, var(--ink-faint)); }
+  /* The figure is the loudest thing on the page. It scales with the card, so
+     "+$123,456.78" still fits a narrow one. */
+  .card .v { margin-top: 8px; font: 550 clamp(19px, 12cqi, 30px)/1.15 var(--display);
+             letter-spacing: -0.01em; font-variant-numeric: lining-nums tabular-nums; }
+  .card.hero .v { font-size: clamp(26px, 10cqi, 44px); }
+  /* A name rather than a figure, as in "Most spent at". */
+  .card .v.text { font: 600 15px/1.35 var(--sans); overflow-wrap: anywhere; }
+  .card .note { margin-top: 6px; font-size: 12.5px; }
+  /* What the hero is made of, side by side under its figure. */
+  .card .parts { display: flex; flex-wrap: wrap; gap: 6px 24px; margin-top: 14px; }
+  .card .parts div { display: grid; }
+  .card .parts span:first-child { font-size: 11.5px; }
+  .card .parts span:last-child { font-size: 14px; font-weight: 550; font-variant-numeric: tabular-nums; }
   /* A card that gives a verdict, Net or a cashflow balance, goes red for a
      loss. A surplus is green like money in, and zero stays grey, like a
      transfer: neither. */
@@ -180,116 +290,145 @@
   .card .v.loss { color: var(--loss); }
   .card .v.even { color: var(--move); }
 
-  .panel { background: var(--panel); padding: 16px 18px;
-           margin-bottom: var(--gap); min-width: 0; }
-  .panel > h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; }
-  .panel > p  { margin: 0 0 12px; font-size: 12px; color: var(--ink-faint); }
-  /* The grid's gap is the space between its panels and its margin the space
-     below, so the panels' own margins would only double it. */
-  .charts { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap);
-            margin-bottom: var(--gap); }
+  .panel { background: var(--tone, var(--panel)); color: var(--tone-ink, inherit);
+           border-radius: var(--radius); padding: 20px 22px; margin-bottom: var(--gap); min-width: 0; }
+  .panel > h3 { margin: 0 0 3px; font: 600 17px/1.3 var(--display); }
+  .panel > p { margin: 0 0 14px; font-size: 13px; color: var(--tone-ink, var(--ink-faint)); }
+  /* Two panels side by side, one above the other once they would get too
+     narrow. The grid's gap is the space between them and its margin the
+     space below, so the panels' own margins would only double it. A long
+     list makes one panel far taller than the other, which would otherwise
+     stretch around empty space to match. */
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
+            gap: var(--gap); margin-bottom: var(--gap); align-items: start; }
   .charts > * { min-width: 0; margin-bottom: 0; }
-  /* A long category list makes one chart far taller than the other, which
-     would otherwise stretch around empty space to match. */
-  #analysis .charts { align-items: start; }
-  @media (max-width: 1040px) { .charts { grid-template-columns: 1fr; } }
-  .chartbox { position: relative; height: 240px; min-width: 0; }
+  .chartbox { position: relative; height: 250px; min-width: 0; }
   .chartbox canvas { display: block; max-width: 100%; }
 
-  .years { display: flex; gap: 6px; flex-wrap: wrap; margin: var(--gap) 0; }
-  /* 32px tall, like the sidebar items and every other toggle. */
-  .years button {
-    border: 0; background: var(--panel); color: var(--ink-dim);
-    height: 32px; padding: 0 12px; font: inherit; font-family: var(--mono); font-size: 12px; cursor: pointer;
+  /* ---------- period controls ---------- */
+  /* Above everything they filter: the cards, the charts and the tables. */
+  .years, .toolbar { display: flex; flex-wrap: wrap; gap: 10px 12px; align-items: center; }
+  .years { margin-bottom: 20px; }
+  /* A segmented pill: the choices on a soft track, the current one lifted
+     out in white. Where they do not fit on one line they wrap, and the track
+     rounds its corners less: a scrolling track hid choices off the edge. */
+  .seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: 20px;
+         background: var(--soft); }
+  .seg button {
+    flex: none; height: 32px; padding: 0 14px; border: 0; border-radius: 999px; cursor: pointer;
+    background: none; color: var(--ink-dim); font: 500 13px var(--sans); white-space: nowrap;
   }
-  .years button:hover { color: var(--ink); background: var(--hover); }
-  .years button[aria-current="true"] { background: var(--accent); color: var(--bg); }
-  /* From and To wear the analysis page's date input box: the `.picker label`
-     rule below covers both. Only the height differs, to line them up with the
-     year buttons beside them. */
-  .years label { height: 32px; }
+  .seg button:hover { color: var(--ink); }
+  .seg button[aria-current="true"] { background: var(--panel); color: var(--ink); box-shadow: var(--shadow); }
+  /* A date box: a white pill naming its end, with the input inside drawing
+     no box of its own. */
+  .field {
+    display: inline-flex; align-items: center; gap: 4px; height: 38px; padding: 0 8px 0 14px;
+    border-radius: 999px; background: var(--panel); color: var(--ink-faint); font-size: 12.5px;
+    cursor: text; box-shadow: var(--shadow);
+  }
+  .field input { height: 100%; padding: 0 4px; border: 0; background: none; color: var(--ink);
+                 font: 500 13px var(--sans); }
+  .field input:focus { outline: none; }
+  .field:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+  /* minmax(0, …): a grid column otherwise grows to the period pill's full
+     width on a phone, and the account pills run off the screen. */
+  .controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-bottom: 20px; }
+  /* Tick-box pills. A ticked one is lifted out in white. */
+  .picker { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .picker > .caption { margin-right: 6px; }
+  .picker label {
+    display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px 0 10px;
+    border-radius: 999px; background: var(--soft); color: var(--ink-dim);
+    font-size: 13px; cursor: pointer; user-select: none;
+  }
+  .picker label:has(input:checked) { background: var(--panel); color: var(--ink); box-shadow: var(--shadow); }
+  .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
 
-  /* ---------- table ---------- */
-  .tablewrap { background: var(--panel); }
+  /* ---------- tables ---------- */
+  .tablewrap { background: var(--panel); border-radius: var(--radius); margin-bottom: var(--gap); }
   /* Below this, Date, Type, Amount and Balance alone need more than the screen
      has, so let the table scroll inside its own box rather than pushing the
      whole page sideways. Only here: making this a scroll container at any
      width would stop the column headers sticking to the top of the page. */
-  @media (max-width: 600px) {
+  @media (max-width: 760px) {
     .tablewrap { overflow-x: auto; }
     /* Shared out across a phone screen, the one flexible column (Description,
        Name, Pattern) got no width at all. Keep a usable width and scroll. */
     .tablewrap table { min-width: 44rem; }
   }
-  table { width: 100%; border-collapse: collapse; }
+  /* Separate borders, no spacing: with collapsed borders the line under a
+     sticky head stays where the row was laid out, and a sliver of the rows
+     scrolling under it shows through. It also lets a cell round a corner. */
+  table { width: 100%; border-collapse: separate; border-spacing: 0; }
   /* A header strip above the table rather than a <caption>: a caption with
      display:flex is laid out outside its own box, leaving an empty band and
-     printing its text over the sticky column headers. */
+     printing its text over the sticky column headers.
+     It carries the card's top corners itself. The card cannot clip them,
+     because a clipping box would stop the head sticking. */
   .tcap {
-    display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap;
-    padding: 10px; background: var(--panel);
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    min-height: 56px; padding: 10px 16px; background: var(--panel);
+    border-radius: var(--radius) var(--radius) 0 0;
   }
-  .tcap .grp { font-family: var(--display); font-weight: 500; font-size: 14px;
-               letter-spacing: -0.02em; }
+  /* Collapsed, the strip is the whole card. */
+  .tcap:has(.fold[aria-expanded="false"]) { border-radius: var(--radius); }
+  .tcap .grp { font: 600 16px/1.3 var(--display); letter-spacing: -0.005em; }
   /* Sits right after the account name. Quiet until you hover it, because every
      table has one and nine of them shouting would be noise. */
   .findbtn {
-    display: inline-flex; align-items: center; padding: 2px; margin: -2px 0;
-    background: none; border: 0; border-radius: 0; cursor: pointer;
-    color: var(--ink-faint); line-height: 0;
+    display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0;
+    border: 0; border-radius: 999px; background: none; color: var(--ink-faint); cursor: pointer;
   }
-  .findbtn:hover { color: var(--ink); }
+  .findbtn:hover { background: var(--soft); color: var(--ink); }
   /* On All accounts the chevron and the account name are one button, so the
      whole name opens the table, not a 12px arrow. */
   .fold {
-    display: inline-flex; align-items: center; gap: 7px; padding: 0;
-    background: none; border: 0; border-radius: 0; cursor: pointer;
-    color: inherit; font: inherit;
+    display: inline-flex; align-items: center; gap: 8px; padding: 0;
+    border: 0; background: none; cursor: pointer; color: inherit; font: inherit;
   }
   .fold svg { flex: none; color: var(--ink-faint); transition: transform .15s; }
   .fold:hover svg { color: var(--ink); }
   .fold[aria-expanded="true"] svg { transform: rotate(90deg); }
-  /* No taller than the account name beside it, so opening the search does not
+  /* No taller than the buttons beside it, so opening the search does not
      make the strip grow. */
   .tcap .find {
-    flex: 1 1 12rem; min-width: 0; max-width: 22rem;
-    padding: 0 8px; font: inherit; font-size: 13px; line-height: 18px;
-    color: var(--ink); background: var(--bg);
-    border: 1px solid transparent; border-radius: 0;
+    flex: 1 1 12rem; min-width: 0; max-width: 22rem; height: 30px; padding: 0 12px;
+    font: inherit; font-size: 13px; color: var(--ink); background: var(--soft);
+    border: 1px solid transparent; border-radius: 999px;
   }
-  .tcap .find:focus { outline: none; border-color: var(--accent); }
+  .tcap .find:focus { outline: none; border-color: var(--ink-faint); background: var(--panel); }
   /* Chrome's clear button is its own white or blue. This is the same cross in
      a token. */
   .tcap .find::-webkit-search-cancel-button {
     appearance: none; width: 10px; height: 10px; margin-left: 6px; cursor: pointer;
     background: var(--ink-dim);
-    mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' stroke='black' stroke-width='1.6'><path d='M1 1l8 8M9 1L1 9'/></svg>");
+    mask: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' stroke='black' stroke-width='1.6' stroke-linecap='round'><path d='M1 1l8 8M9 1L1 9'/></svg>");
   }
-  .ink-faint { color: var(--ink-faint); }
-  .tcap .meta { font-family: var(--mono); font-size: 12px; color: var(--ink-faint);
-                margin-left: auto; }
+  .tcap .meta { margin-left: auto; font-size: 12.5px; color: var(--ink-faint);
+                font-variant-numeric: tabular-nums; }
   th {
-    text-align: left; font-family: var(--mono); font-size: 11px;
-    text-transform: uppercase; letter-spacing: .08em;
-    color: var(--ink-faint); font-weight: 400; padding: 5px 10px;
+    text-align: left; font: 600 11px/1.4 var(--sans); text-transform: uppercase; letter-spacing: .1em;
+    color: var(--ink-faint); padding: 8px 12px;
     border-bottom: 1px solid var(--line); background: var(--panel);
   }
   /* The whole head sticks: the caption strip with its search and add buttons,
-     the add form when it is open, and the column headers. Below the chat bar,
-     and in the drill-down below its 56px header: the 30px close button and
-     13px padding above and below. Not at 600px and under, where
-     the table scrolls in its own box and an offset would push the head down
-     over the first row. */
+     the add form when it is open, and the column headers. Below the top bar,
+     and in the drill-down below its band. Not at 760px and under, where the
+     table scrolls in its own box and an offset would push the head down over
+     the first row. */
   thead { position: sticky; top: 0; z-index: 2; }
-  @media (width > 600px) {
+  @media (width > 760px) {
     thead { top: var(--bar); }
-    #drill thead { top: 56px; }
+    #drill thead { top: var(--drill-head); }
   }
   /* The caption strip is the head's first row, so it sticks with the columns.
      Its cell is a td: a th would print the strip faint, in the column-header
-     styling, and read as the header of every cell below. */
-  tr.cap td { padding: 0; border-bottom: 0; }
-  td { padding: 4px 10px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+     styling, and read as the header of every cell below. The cell is the
+     ground's colour, so what shows past the strip's round corners is the
+     page, even with rows scrolling under a stuck head. */
+  tr.cap td { padding: 0; border-bottom: 0; background: var(--bg); }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
   /* One transaction, one row. Date, Type, Amount and Balance each settle at the
      width their own content needs, no narrower, so they never truncate. The
      description takes every pixel that is left.
@@ -299,34 +438,36 @@
      the browser measures the other columns, then `width: 100%` claims all the
      slack. Being the only constrained column, it is also the only one that
      truncates; hovering shows the full text. */
-  /* Separate borders, no spacing: with collapsed borders the line under a
-     sticky head stays where the row was laid out, and a sliver of the rows
-     scrolling under it shows through. */
-  table.rows { table-layout: auto; width: 100%; border-collapse: separate; border-spacing: 0; }
+  table.rows { table-layout: auto; }
   table.rows td, table.rows th { white-space: nowrap; }
   table.rows td.desc, table.rows th.desc {
     width: 100%; max-width: 0; overflow: hidden; text-overflow: ellipsis;
   }
   /* The type tag always shows; a long category name truncates rather than
-     spilling into the Amount column. */
-  table.rows td.tags .tag { max-width: 7.5rem; overflow: hidden; text-overflow: ellipsis;
-                            vertical-align: bottom; }
+     spilling into the Amount column. A what-if tag never does: "what-if ·
+     covered" is the whole warning. */
+  table.rows td.tags .tag:not(.whatif) { max-width: 8.5rem; overflow: hidden; text-overflow: ellipsis; }
   /* A what-if or a provisional row carries a third tag. Its category gives
      way, so the Type column stays the width it has on every other row. */
-  tr.whatif td.tags .tag.cat, tr.provisional td.tags .tag.cat { max-width: 5rem; }
+  tr.whatif td.tags .tag.cat, tr.provisional td.tags .tag.cat { max-width: 5.5rem; }
   /* The same on the rules page, capped at its fixed-width category column. */
-  #rules td .tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis;
-                   vertical-align: bottom; }
+  #rules td .tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   tbody tr:last-child td { border-bottom: 0; }
   tbody tr:hover td { background: var(--hover); }
+  /* Drawn inside the row, so a stuck head or a scrolling box cannot cut it off. */
+  tr:focus-visible { outline-offset: -2px; }
+  /* The last row rounds the card's bottom corners, so a hovered row does not
+     paint square ones over them. */
+  .tablewrap tbody tr:last-child td:first-child { border-bottom-left-radius: var(--radius); }
+  .tablewrap tbody tr:last-child td:last-child { border-bottom-right-radius: var(--radius); }
   td.r, th.r { text-align: right; }
   td.date { white-space: nowrap; color: var(--ink-faint); font-size: 13px; }
 
-  td.amt { white-space: nowrap; font-weight: 500; }
+  td.amt { white-space: nowrap; font-weight: 550; }
   td.bal { white-space: nowrap; color: var(--ink-faint); font-size: 13px; }
   code {
     font: 12px/1.5 var(--mono);
-    background: var(--bg); border-radius: 0; padding: 1px 5px;
+    background: var(--soft); border-radius: 6px; padding: 2px 6px;
     /* A regex has no spaces to break at, so allow a break anywhere. Without
        this the cell cannot shrink and the other columns get squeezed away. */
     overflow-wrap: anywhere;
@@ -337,336 +478,242 @@
   /* Fixed layout keeps the narrow columns readable no matter how long the
      pattern is. Widths come from the colgroup on each table. */
   table.fixed { table-layout: fixed; }
-  table.fixed td { vertical-align: middle; }
-  /* Solid fill. The badge colour arrives as --tag rather than as `color`,
-     because `background: currentColor` and a readable label cannot both come
-     from the same property. */
+  /* One line, the rest on hover. */
+  .clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* A soft pill. Its colours arrive as --tag and --tag-ink, so a category can
+     hand over its own pair in a style attribute. */
   .tag {
-    display: inline-block; font-family: var(--mono); font-size: 10px;
-    text-transform: uppercase; letter-spacing: .06em; white-space: nowrap;
-    padding: 1px 6px; background: var(--tag, var(--ink-faint)); color: var(--bg);
+    display: inline-block; vertical-align: middle; white-space: nowrap;
+    padding: 0 9px; border-radius: 999px; font: 500 12px/20px var(--sans);
+    background: var(--tag, var(--soft)); color: var(--tag-ink, var(--ink-dim));
   }
-  .tag.in { --tag: var(--in); }
-  .tag.out { --tag: var(--out); }
-  .tag.move { --tag: var(--move); }
+  .tag.in { --tag: var(--mint-soft); --tag-ink: var(--mint-ink); }
+  .tag.out { --tag: var(--coral-soft); --tag-ink: var(--coral-ink); }
   /* In the transaction tables money reads the way a bank statement does:
      spending red, where the rest of the app leaves money out plain ink.
-     The amount, the type badge and the out figure in the header strip all
-     agree. */
+     The amount and the out figure in the header strip agree. */
   table.rows td.amt.out, .tcap .meta .out { color: var(--loss); }
-  table.rows .tag.out { --tag: var(--loss); }
-  /* A provisional row is one the bank has not finalised. It is dimmed, and a
-     tag says so; the reason is in the tag's title. */
+  /* A provisional row is one the bank has not finalised. It is dimmed, and an
+     outlined tag says so; the reason is in the tag's title. */
   tr.provisional td.desc, tr.provisional td.date { color: var(--ink-faint); font-style: italic; }
-  /* A what-if is a plan you typed in, not a bank row. It wears amber: the
-     tag is filled with it and the description is written in it. */
-  /* No truncation: "what-if · covered" is the whole warning. */
-  .tag.whatif { --tag: var(--plan); max-width: none; }
+  .tag.pending { background: none; box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-faint); }
+  /* A what-if is a plan you typed in, not a bank row. Its tag is yellow and
+     its description is written in the what-if amber, --plan. */
+  .tag.whatif { --tag: var(--yellow-soft); --tag-ink: var(--yellow-ink); }
   tr.whatif td.desc { color: var(--plan); }
 
   /* ---------- editing rows ---------- */
   /* An editor stands in for one cell, or for one tag, and keeps the row's
-     height: 22px sits inside the line the text took, so nothing around it moves. */
-  .editor, tr.add input, tr.add select {
-    height: 22px; padding: 0 5px; font: inherit; font-size: 13px; color: var(--ink);
-    background: var(--bg); border: 1px solid transparent; border-radius: 0;
+     height: the negative margin keeps its 22px inside the line the text took,
+     so nothing around it moves. */
+  .editor {
+    height: 22px; margin-block: -2px; padding: 0 6px; font: inherit; font-size: 13px; color: var(--ink);
+    background: var(--soft); border: 1px solid transparent; border-radius: 7px;
     vertical-align: middle;
   }
-  .editor:focus, tr.add input:focus, tr.add select:focus { outline: none; border-color: var(--accent); }
+  /* The add form is a row of its own, so its fields can be full size. Its
+     what-if tick box keeps the tick box styling. */
+  tr.add input:not([type=checkbox]), tr.add select {
+    height: 32px; padding: 0 10px; font: inherit; font-size: 13px; color: var(--ink);
+    background: var(--soft); border: 1px solid transparent; border-radius: 10px;
+  }
+  .editor:focus, tr.add input:not([type=checkbox]):focus, tr.add select:focus {
+    outline: none; border-color: var(--ink-faint); background: var(--panel);
+  }
   td.desc .editor, td.desc input { width: 100%; }
-  td.amt .editor, tr.add [name="amount"] { width: 5.5rem; text-align: right; }
-  tr.add [name="category"] { width: 7rem; }
+  td.amt .editor, tr.add [name="amount"] { width: 6rem; text-align: right; }
+  tr.add [name="category"] { width: 8rem; }
   /* Dimmed while the server has it. The reload draws the row afresh. */
   td[aria-busy="true"], tr[aria-busy="true"] td { opacity: .5; }
-  /* "+ add" sits in the caption strip beside the search button, quiet like
-     it. The form it opens is the head's second row, one cell across the
+  /* "+ Add" sits in the caption strip beside the search button. The form it
+     opens is the head's second row, one cell across the
      table, so it is on screen at any scroll position, and a search, which
      redraws the body only, leaves it alone. The form wraps: one line at
      1440, two below that. Spread over the five columns it squeezed
      Description to 27px at 1024. */
-  /* Centred like the search icon: on the strip's baseline the smaller mono
-     glyphs sat visibly low beside the title. */
-  .tcap .addbtn { align-self: center; padding: 0 2px; color: var(--ink-faint);
-                  font-family: var(--mono); font-size: 12px; }
-  .tcap .addbtn:hover { background: none; color: var(--ink); }
-  tr.add td { white-space: normal; padding: 6px 10px; border-bottom: 1px solid var(--line);
+  .tcap .addbtn { color: var(--ink-dim); background: var(--soft); }
+  .tcap .addbtn:hover { color: var(--ink); }
+  tr.add td { white-space: normal; padding: 10px 16px; border-bottom: 1px solid var(--line);
               background: var(--panel); }
-  tr.add .addform { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+  tr.add .addform { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   tr.add .addform [name="description"] { flex: 1 1 14rem; }
-  tr.add .addform label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer;
-                          white-space: nowrap; font-size: 13px; height: 22px; }
-  .empty { padding: 28px 10px; text-align: center; color: var(--ink-faint); }
-  .controls { display: flex; gap: var(--gap); flex-wrap: wrap; align-items: flex-start;
-              margin-bottom: var(--gap); }
-  .controls > div { min-width: 0; }
-  .picker { display: flex; flex-wrap: wrap; gap: 6px; }
-  .picker label, .years label {
-    display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;
-    background: var(--panel);
-    padding: 6px 12px 6px 9px; font-size: 13px; color: var(--ink-dim);
-  }
-  .picker label:has(input:checked) { color: var(--ink); }
-  /* A date box is one of these labels with the input inside. The label gives
-     up its padding and the input draws no box of its own, so the fill the
-     other labels have is the only one it shows. */
-  label:has(> input[type=date]) { padding: 0; }
-  label > input[type=date] { border: 0; background: none; font: inherit; color: inherit; padding: 5px 8px; }
-  .swatch { width: 9px; height: 9px; border-radius: 0; display: inline-block; flex: none; }
+  tr.add .addform label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer;
+                          white-space: nowrap; font-size: 13px; height: 32px; }
+  .empty { padding: 32px 12px; text-align: center; color: var(--ink-faint); }
   tbody tr.pick { cursor: pointer; }
   /* The name is the part you click to drill in, so only it gets the underline.
      The tick box beside it does something else. */
   tbody tr.pick:hover td:nth-child(2) { text-decoration: underline; text-underline-offset: 3px; }
-  td.tick, th.tick { width: 2.2rem; padding-right: 0; }
+  td.tick, th.tick { width: 2.4rem; padding-right: 0; }
   /* A category left out of the totals. Still listed, still clickable, just not
      counted. Dimmed rather than hidden, so you can put it back. */
-  tr.off td { opacity: .6; }
+  tr.off td { opacity: .62; }
   tr.off td.tick { opacity: 1; }
 
-  /* 32px tall, level with the account toggles beside the period chips. */
-  .chip {
-    font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
-    height: 32px; padding: 0 9px; cursor: pointer; border-radius: 0;
-    border: 0; background: var(--panel); color: var(--ink-dim);
-  }
-  .chip:hover { color: var(--ink); background: var(--hover); }
-  .chip[aria-current="true"] { background: var(--accent); color: var(--bg); }
-  /* The category drill-down covers the window below the chat bar. The page
+  /* ---------- drill-down ---------- */
+  /* The category drill-down covers the window below the top bar. The page
      underneath stays rendered, so closing is instant and the scroll position
      survives. */
   #drill {
     position: fixed; inset: var(--bar) 0 0; z-index: 50; background: var(--bg);
     overflow-y: auto; overscroll-behavior: contain;
+    scroll-padding-top: calc(var(--drill-head) + 100px);   /* as html's, under the band */
   }
+  /* A band in the category's own pastel, which arrives as --tag and --tag-ink.
+     Its content lines up with the centred body below it. */
   .drill-head {
-    position: sticky; top: 0; z-index: 3; background: var(--bg);   /* above the tables' heads (2) */
-    display: flex; align-items: center; gap: 12px; padding: 13px 24px;
+    position: sticky; top: 0; z-index: 3; height: var(--drill-head);   /* above the tables' heads (2) */
+    display: flex; align-items: center; gap: 14px;
+    padding: 0 max(32px, calc((100% - 1320px) / 2 + 32px));
+    background: var(--tag, var(--soft)); color: var(--tag-ink, var(--ink));
   }
-  .drill-head h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.02em;
-                   display: flex; align-items: center; gap: 9px; }
-  .drill-head .sub { color: var(--ink-dim); font-size: 13px; }
+  .drill-head h2 { margin: 0; font: 600 26px/1.1 var(--display); letter-spacing: -0.01em;
+                   display: flex; align-items: center; gap: 10px; }
+  .drill-head .sub { font-size: 14px; }
   .drill-close {
-    margin-left: auto; flex: none; width: 30px; height: 30px; border-radius: 0;
-    border: 0; background: var(--hover); color: var(--ink-dim);
-    font: inherit; font-size: 17px; line-height: 1; cursor: pointer;
+    margin-left: auto; flex: none; width: 38px; height: 38px; padding: 0;
+    border: 0; border-radius: 999px; background: var(--panel); color: var(--ink-dim);
+    font: inherit; font-size: 15px; line-height: 1; cursor: pointer; box-shadow: var(--shadow);
   }
   .drill-close:hover { color: var(--ink); }
-  .drill-body { padding: 20px 24px 64px; }
+  .drill-body { max-width: 1320px; margin: 0 auto; padding: 22px 32px 64px; }
   body.locked { overflow: hidden; }
+
   /* A span in a table cell, so it needs display: block to take a height. */
-  .bar { display: block; height: 6px; background: var(--line-soft); overflow: hidden; }
-  .bar > i { display: block; height: 100%; }
-  .hint { background: var(--panel); border-left: 3px solid var(--move);
-          border-radius: 0; padding: 12px 16px; margin-bottom: var(--gap); font-size: 13px; }
-  form.holding { display: grid; grid-template-columns: 2fr 1.4fr 1fr 1fr auto; gap: 8px; align-items: end; }
-  @media (max-width: 900px) { form.holding { grid-template-columns: 1fr 1fr; } }
-  form.holding label { display: block; font-size: 11px; color: var(--ink-faint);
-    text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+  .bar { display: block; height: 8px; border-radius: 999px; background: var(--soft); overflow: hidden; }
+  .bar > i { display: block; height: 100%; border-radius: 999px; }
+  /* A tip or an explanation: a soft yellow card. */
+  .hint { background: var(--yellow-soft); color: var(--yellow-ink); border-radius: var(--radius);
+          padding: 16px 20px; margin-bottom: var(--gap); font-size: 13.5px; line-height: 1.6; }
+  .hint h3 { margin: 0 0 4px; font: 600 16px/1.3 var(--display); }
+  form.holding { display: grid; grid-template-columns: 2fr 1.4fr 1fr 1fr auto; gap: 10px; align-items: end; }
+  form.holding.rule-form { grid-template-columns: 1fr 2.4fr auto; }
+  @media (max-width: 900px) { form.holding, form.holding.rule-form { grid-template-columns: 1fr 1fr; } }
+  form.holding label { display: block; margin-bottom: 6px; }
   /* Fields and buttons in a form row share one height. Left alone, a date
      field and a button each come out a pixel or two off a text field. */
   form.holding input {
-    width: 100%; height: 38px; padding: 7px 9px; font: inherit; color: var(--ink);
-    background: var(--bg); border: 0; border-radius: 0;
+    width: 100%; height: 40px; padding: 0 14px; font: inherit; color: var(--ink);
+    background: var(--soft); border: 1px solid transparent; border-radius: 12px;
   }
-  form.holding input:focus { outline: 2px solid var(--move); outline-offset: -1px; }
-  .btn { height: 38px; padding: 0 16px; font: inherit; font-family: var(--mono); font-size: 12px;
-         text-transform: uppercase; letter-spacing: .06em; cursor: pointer;
-         border: 0; background: var(--accent); color: var(--bg); }
-  .btn.ghost { background: var(--hover); color: var(--ink-dim); }
+  form.holding input:focus { outline: none; border-color: var(--ink-faint); background: var(--panel); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    height: 40px; padding: 0 18px; border: 0; border-radius: 999px; cursor: pointer;
+    background: var(--accent); color: var(--bg); font: 500 13.5px var(--sans); white-space: nowrap;
+  }
+  .btn:hover { background: color-mix(in srgb, var(--accent) 84%, var(--bg)); }
+  .btn.ghost { background: var(--soft); color: var(--ink-dim); }
   .btn.ghost:hover { color: var(--ink); }
   /* Buttons are only disabled while their request runs. */
   .btn:disabled { opacity: .5; cursor: progress; }
-  .rowbtn { background: none; border: 0; color: var(--ink-faint); cursor: pointer;
-            font: inherit; font-size: 12px; padding: 2px 6px; border-radius: 0; }
-  .rowbtn:hover { background: var(--hover); color: var(--ink); }
+  .rowbtn { background: none; border: 0; border-radius: 999px; cursor: pointer;
+            padding: 3px 10px; color: var(--ink-faint); font: 500 12.5px/20px var(--sans); }
+  .rowbtn:hover { background: var(--soft); color: var(--ink); }
   /* × on a row entered by hand, in space every date cell reserves, so dates
      line up whether a row has one or not. Inline, pulled back into the
      padding: a positioned cell in the body paints over the sticky head as
      the table scrolls under it. Faded out until the row is hovered or the ×
      itself is focused, so the ledger does not fill with buttons. Opacity,
      not visibility: a hidden button cannot take the focus, so Tab could
-     never reach it. After .rowbtn on purpose: it takes the line height
-     from it. */
-  table.rows td.date, table.rows th.date { padding-left: 24px; }
-  .del { display: inline-block; width: 18px; margin: 0 0 0 -18px; padding: 0;
-         text-align: center; opacity: 0; line-height: 1; vertical-align: middle; }
+     never reach it. After .rowbtn on purpose, so its padding: 0 wins; the
+     line height comes from .rowbtn. */
+  table.rows td.date, table.rows th.date { padding-left: 34px; }
+  .del { display: inline-block; width: 20px; margin: 0 4px 0 -24px; padding: 0;
+         text-align: center; opacity: 0; vertical-align: middle; }
   tr:hover .del, .del:focus-visible { opacity: 1; }
-  /* margin-top:auto pins this to the bottom when the account list is short,
-     and lets it scroll away with the list when it is long. */
-  nav .foot {
-    margin-top: auto; padding: 12px 10px 2px;
-    color: var(--ink-faint); font-size: 11px; line-height: 1.5;
-  }
-  nav .foot div + div { margin-top: 2px; }
-  /* The hide/show toggle after the what-if count: a word in the line, not a
-     sidebar item, so it sheds the item styling every other nav button gets. */
-  nav .whatif-toggle { display: inline; width: auto; padding: 0; font: inherit;
-                       color: var(--ink-dim); text-decoration: underline; text-underline-offset: 2px; }
-  nav .whatif-toggle:hover { background: none; color: var(--ink); }
-  /* On a phone the column becomes a wrapped row of groups, so a view opens on
-     its own title instead of under a screen of account names. The foot keeps
-     a line to itself. */
-  @media (max-width: 860px) {
-    nav { position: static; height: auto; border-bottom: 1px solid var(--line);
-          flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 0 12px; padding: 10px 12px; }
-    nav .group { margin-bottom: 8px; }
-    nav button { width: auto; }
-    nav .foot { flex-basis: 100%; padding-top: 8px; }
-  }
 
   /* ---------- the agent ---------- */
-  /* Fixed to the top on every view and every width, so you can always just
-     type. It keeps a one-line slot in the layout; the answers open downwards
-     over the page rather than pushing it, and clicking the page puts them away.
-     --bar is that one-line height, and the layout below is offset by it. It
-     stacks above the drill-down overlay too, so it works there as well. */
+  /* A panel floating over the right of the page. It never pushes the page
+     aside: the dashboard stays where it is underneath. Hidden, it cannot
+     take the focus. Visibility switches at once on the way in, so the box
+     can take the caret straight away, and waits for the fade on the way out.
+     It stacks above the drill-down and the top bar, so it works over both. */
   #agent {
-    position: fixed; inset: 0 0 auto 0; z-index: 60;
-    background: var(--bg); border-bottom: 1px solid var(--line);
-    display: flex; flex-direction: column; max-height: 100vh;
-    /* The whole chat is monospace, like the terminal its markdown copies.
-       13px, a pixel under the page's text, because mono glyphs run wider and
-       taller and would otherwise look a size up. Everything inside inherits. */
-    font: 13px/1.55 var(--mono);
+    position: fixed; z-index: 60; top: calc(var(--bar) + 2px); right: 14px; bottom: 14px;
+    width: min(440px, calc(100vw - 28px));
+    display: flex; flex-direction: column; overflow: hidden;
+    background: var(--panel); border-radius: 24px; box-shadow: var(--shadow-pop);
+    visibility: hidden; opacity: 0; transform: translateX(16px);
+    transition: opacity .18s ease, transform .18s ease, visibility 0s .18s;
   }
-  /* Buttons and text fields do not inherit fonts by default, so they have to be
-     told, Apply and Dismiss on a proposed change included. */
-  #agent button, #agent textarea { font-family: var(--mono); }
-
-  /* Two layers of the same gradient: a hairline on the edge, and a blurred
-     copy below it doing the glowing. Both absolutely positioned, so neither
-     becomes a flex item of the bar. */
-  #agent::before, #agent::after {
-    content: ""; position: absolute; left: 0; right: 0; pointer-events: none;
-    background: var(--spectrum); background-size: 200% 100%;
-    opacity: 0; transition: opacity .3s ease;
+  #agent.open { visibility: visible; opacity: 1; transform: none;
+                transition: opacity .18s ease, transform .18s ease, visibility 0s; }
+  /* Full screen: the same chat given the whole window, the conversation kept
+     to a readable width down the middle. */
+  #agent.full { inset: 8px; width: auto; }
+  #agent.full .turn, #agent.full .agent-head, #agent.full #agentForm {
+    width: calc(100% - 24px); max-width: 820px; margin-inline: auto;
   }
-  /* Exactly over the 1px border, not on top of it: bottom:-1px puts this in the
-     border's own band (a containing block is its padding box), so the edge is
-     the same weight focused or not, just a different colour. */
-  #agent::after  { bottom: -1px; height: 1px; }
-  /* Hung off the bottom edge (top:100%) and clipped flat along its own top, so
-     the blur can only spread downwards. Left to itself a 10px blur reaches just
-     as far upwards, and washes over the text you are typing. The three negative
-     insets leave the other sides free to stay soft. */
-  #agent::before {
-    top: 100%; height: 10px; filter: blur(12px);
-    clip-path: inset(0 -40px -40px -40px);
-  }
-  #agent:focus-within::after  { opacity: 1; }
-  #agent:focus-within::before { opacity: .55; }
-  @media (prefers-reduced-motion: no-preference) {
-    #agent:focus-within::before, #agent:focus-within::after {
-      animation: spectrum-drift 9s linear infinite;
-    }
-  }
-  @keyframes spectrum-drift { to { background-position: -200% 0; } }
-
-
-  /* Answers sit above the input, so the thing you are reading does not jump
-     when the box grows under it. */
-  #agentLog {
-    overflow-y: auto; padding: 0 12px; display: none;
-    border-bottom: 1px solid var(--line-soft);
-    /* A scroll that reaches the end of the log stops there, rather than
-       running on into the page behind. */
-    overscroll-behavior: contain;
-  }
-  /* Half the screen at most: the log opens over the page, and the page is what
-     you are asking about. */
-  #agent.open #agentLog { display: block; padding: 12px; max-height: 50vh; }
-  /* Full screen: the same chat given the whole window, conversation above and
-     the input along the bottom. It comes after the 50vh cap on purpose, so it
-     wins at equal specificity. */
-  #agent.full { inset: 0; max-height: none; }
-  #agent.full #agentLog { flex: 1; min-height: 0; max-height: none; }
-
-  /* Floats over the top right of the conversation, so text runs underneath
-     instead of wrapping round it. Only shown while there is a conversation to
-     make bigger. */
-  #agentFull {
-    position: absolute; top: 8px; right: 12px; z-index: 2; display: none;
-    width: 24px; height: 24px; padding: 0; align-items: center; justify-content: center;
-    border: 0; background: var(--hover); color: var(--ink-dim);
-    border-radius: 0; cursor: pointer;
-  }
-  #agentFull:hover { color: var(--ink); }
-  #agent.open #agentFull { display: flex; }
+  /* The spectrum along the top edge. */
+  #agent::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px;
+                   background: var(--spectrum); }
+  .agent-head { flex: none; display: flex; align-items: center; gap: 2px; padding: 16px 12px 8px 22px; }
+  .agent-head h2 { margin: 0 auto 0 0; font: 600 18px/1.2 var(--display); }
   #agentFull .shrink, #agent.full #agentFull .grow { display: none; }
   #agent.full #agentFull .shrink { display: block; }
-  #agentForm { display: flex; gap: 10px; align-items: flex-end; padding: 0 12px;
-               min-height: var(--bar); }
+  /* The conversation. A scroll that reaches its end stops there, rather than
+     running on into the page behind. */
+  #agentLog { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 22px 18px;
+              overscroll-behavior: contain; }
+  /* Before anything is said, the panel says what the agent can do. */
+  #agentLog:empty { display: none; }
+  #agentLog:not(:empty) + .agent-empty { display: none; }
+  .agent-empty { flex: 1; display: grid; align-content: center; gap: 8px; padding: 24px 36px;
+                 text-align: center; color: var(--ink-faint); font-size: 13.5px; }
+  .agent-empty strong { font: 600 21px/1.25 var(--display); color: var(--ink); }
+  /* The box you type in, with its buttons riding the bottom edge, so they
+     stay level with the last line as the box grows. */
+  #agentForm { flex: none; display: flex; align-items: flex-end; gap: 8px; margin: 0 12px 12px;
+               padding: 4px 4px 4px 16px; border-radius: 22px; background: var(--soft); }
+  #agentForm:focus-within { box-shadow: inset 0 0 0 1.5px var(--ink-faint); }
   #agentInput {
     flex: 1; min-width: 0; resize: none; overflow-y: auto;
-    max-height: 40vh; padding: calc((var(--bar) - 1.45em) / 2) 0;
-    border: 0; background: none; overscroll-behavior: contain;
+    max-height: 40vh; padding: 8px 0; border: 0; background: none; overscroll-behavior: contain;
     color: var(--ink); font: inherit; line-height: 1.45;
   }
   #agentInput:focus { outline: none; }
-  #agent:focus-within #agentInput::placeholder { color: var(--ink-dim); }
-  /* The right-hand controls: a cluster exactly one row tall, riding the bottom
-     of the form. The input pads its text into the middle of that same row, so
-     whatever is centred here sits level with the last line of text, and stays
-     level as the box grows. There are no per-button margins to keep in step.
-     Those had Send 2px from the top of the row and 6px from the bottom. */
-  .agent-controls { flex: none; display: flex; align-items: center; gap: 6px;
-                    height: var(--bar); }
-  /* Scoped to the whole chat and carrying an ID, on purpose. The buttons set
-     display through #agentSend and #agentStop, and an ID selector outranks a
-     plain [hidden] rule. So for a while Stop stayed on screen with nothing
-     running, and Send showed on an empty box, with hidden set on both. */
-  #agent [hidden] { display: none; }
-  #agentSpin { font: 14px/1 var(--mono); color: var(--ink-dim); width: 1.2ch;
-               text-align: center; }
-  #agentSpin::after { content: "⠋"; animation: braille .9s steps(1) infinite; }
-  @keyframes braille {
-    0%  { content: "⠋" }  10% { content: "⠙" }  20% { content: "⠹" }
-    30% { content: "⠸" }  40% { content: "⠼" }  50% { content: "⠴" }
-    60% { content: "⠦" }  70% { content: "⠧" }  80% { content: "⠇" }
-    90% { content: "⠏" }
-  }
+  .agent-controls { flex: none; display: flex; align-items: center; gap: 6px; height: 36px; }
+  #agentSpin { margin: 0 6px; }
   #agentSend, #agentStop {
-    height: var(--control); padding: 0 8px; border-radius: 0; cursor: pointer;
-    display: inline-flex; align-items: center; font: 12px/1 var(--mono);
+    height: 32px; padding: 0 14px; border: 0; border-radius: 999px; cursor: pointer;
+    display: inline-flex; align-items: center; font: 500 13px var(--sans);
   }
-  #agentSend { border: 0; background: var(--accent); color: var(--bg); }
-  #agentStop { border: 0; background: var(--hover); color: var(--ink-dim); }
+  #agentSend { background: var(--accent); color: var(--bg); }
+  #agentStop { background: var(--panel); color: var(--ink-dim); }
   #agentStop:hover { color: var(--ink); }
 
-  /* One rhythm for the whole conversation: 18px between turns, 8px between the
-     parts of a turn, and 2px between the agent's working steps so they read as
-     a single block. Your messages carry a rule in the accent colour down the
-     left, so where one turn ends and the next begins is visible at a glance.
-     Not a fill: code blocks in a reply have one. */
-  .turn + .turn { margin-top: 18px; }
+  /* One rhythm for the whole conversation: 22px between turns, 10px between
+     the parts of a turn, and 3px between the agent's working steps so they
+     read as a single block. Your messages are pink bubbles on the right, so
+     where one turn begins is visible at a glance. */
+  .turn + .turn { margin-top: 22px; }
   .turn .you {
-    border-left: 2px solid var(--accent);
-    padding: 1px 0 1px 10px; white-space: pre-wrap; line-height: 1.5;
+    width: fit-content; max-width: 88%; margin-left: auto; padding: 9px 15px;
+    border-radius: 20px 20px 6px 20px; background: var(--pink); color: var(--pink-ink);
+    white-space: pre-wrap; line-height: 1.5;
   }
-  .turn .you.queued { color: var(--ink-faint); border-left-color: var(--line); }
-  .tag-queued { font: 11px var(--mono); margin-left: 8px; color: var(--ink-faint); }
-  .turn .steps:not(:empty) { margin-top: 8px; display: grid; gap: 2px; }
-  .turn .said:not(:empty) { margin-top: 8px; line-height: 1.55; }
-  /* Markdown the way a terminal draws it: one text size for everything, with
-     structure carried by weight, colour and indentation instead of bigger
-     headings with margins of their own. Every block, whatever kind, is
-     separated by the same 8px. Code is the same size as the text
-     around it, since the whole chat is set in mono. */
+  .turn .you.queued { background: var(--soft); color: var(--ink-dim); }
+  .tag-queued { font-size: 11.5px; margin-left: 8px; }
+  .turn .steps:not(:empty) { margin-top: 10px; display: grid; gap: 3px; }
+  .turn .said:not(:empty) { margin-top: 10px; line-height: 1.6; }
+  /* Markdown drawn quietly: headings a step up in the soft serif, structure
+     carried by weight and indentation, and every block separated by the same
+     10px. */
   .said > * { margin: 0; }
-  .said > * + * { margin-top: 8px; }
-  .said strong { color: var(--ink); font-weight: 600; }
+  .said > * + * { margin-top: 10px; }
+  .said strong { font-weight: 600; }
   .said em { font-style: italic; }
-  .said a { color: var(--ink); }
-  .said code { font: 13px var(--mono); color: var(--ink); background: var(--panel);
-               padding: 0 4px; }
-  .said .md-h { font-weight: 600; }
-  .said .md-list { display: grid; gap: 2px; }
+  .said a { color: inherit; }
+  .said code { font-size: 12.5px; }
+  .said .md-h { font: 600 15px/1.35 var(--display); }
+  .said .md-list { display: grid; gap: 3px; }
   .said .md-li { display: flex; gap: 8px; padding-left: calc(var(--level, 0) * 18px); }
   .said .md-mark { flex: none; min-width: 1.4ch; color: var(--ink-faint); }
-  .said .md-quote { border-left: 2px solid var(--line); padding-left: 10px; color: var(--ink-dim); }
+  .said .md-quote { border-left: 3px solid var(--soft); padding-left: 12px; color: var(--ink-dim); }
   .said .md-hr { border: 0; border-top: 1px solid var(--line); }
-  .said .md-code { font: 13px/1.5 var(--mono); color: var(--ink-dim); background: var(--panel);
-                   padding: 8px 10px; overflow-x: auto;
-                   white-space: pre; }
+  .said .md-code { font: 12px/1.55 var(--mono); color: var(--ink-dim); background: var(--soft);
+                   padding: 10px 12px; border-radius: 12px; overflow-x: auto; white-space: pre; }
   /* Tables inherit the ledger's rules unless told otherwise: full width, sticky
      uppercase headers, hover fills. None of that belongs in a chat reply. */
   .said .md-table { overflow-x: auto; }
@@ -674,56 +721,137 @@
   /* A chat table's box never scrolls, so a sticky head only sat over its
      first row. */
   .said thead { position: static; }
-  .said th, .said td { position: static; padding: 3px 16px 3px 0; background: none;
-                       font: inherit; text-transform: none; letter-spacing: normal;
+  .said th, .said td { padding: 4px 16px 4px 0; background: none;
+                       font: inherit; font-size: 13px; text-transform: none; letter-spacing: normal;
                        white-space: nowrap; font-variant-numeric: tabular-nums;
-                       border-bottom: 1px solid var(--line-soft); }
+                       border-bottom: 1px solid var(--rule); }
   .said th { color: var(--ink-faint); font-weight: 500; border-bottom-color: var(--line); }
   .said th:last-child, .said td:last-child { padding-right: 0; }
   .said tbody tr:hover td { background: none; }
-  .work > summary { color: var(--ink-faint); cursor: pointer; list-style: none;
-                    font: 12px var(--mono); }
+  .work > summary { color: var(--ink-faint); cursor: pointer; list-style: none; font-size: 12.5px; }
   .work > summary::-webkit-details-marker { display: none; }
   .work > summary:hover { color: var(--ink-dim); }
-  .work pre { margin: 6px 0 2px; padding: 8px 10px; overflow-x: auto;
-              background: var(--panel);
-              font: 11px/1.5 var(--mono); color: var(--ink-dim); }
-  .step { color: var(--ink-faint); font: 12px var(--mono); }
-  .propose { border-left: 3px solid var(--accent);
-             background: var(--panel); padding: 10px 12px; margin-top: 8px; }
-  .propose h4 { margin: 0 0 4px; font-size: 13px; font-weight: 500; }
-  .propose p { margin: 0 0 8px; font-size: 12px; color: var(--ink-dim); }
-  .propose .work { margin-bottom: 8px; }
-  .propose .work pre { background: var(--bg); }
-  .propose .btn { margin-right: 6px; }
-  .agent-err, .agent-note { margin-top: 8px; }
+  .work pre { margin: 6px 0 2px; padding: 10px 12px; overflow-x: auto; border-radius: 12px;
+              background: var(--soft); font: 11.5px/1.5 var(--mono); color: var(--ink-dim); }
+  .step { color: var(--ink-faint); font-size: 12.5px; }
+  /* A change the agent wants to make, waiting for your Apply. */
+  .propose { margin-top: 12px; padding: 14px 16px; border-radius: 18px;
+             background: var(--yellow-soft); color: var(--yellow-ink); }
+  .propose h4 { margin: 0 0 4px; font: 600 15px/1.3 var(--display); }
+  .propose p { margin: 0 0 10px; font-size: 13px; }
+  .propose .work { margin-bottom: 10px; }
+  .propose .work > summary { color: inherit; }
+  .propose .work pre { background: color-mix(in srgb, var(--panel) 70%, transparent); color: inherit; }
+  .propose .btn { height: 32px; padding: 0 14px; margin-right: 6px; }
+  .agent-err, .agent-note { margin-top: 10px; }
   .agent-err { color: var(--loss); font-size: 13px; }
-  .agent-note { color: var(--ink-faint); font: 12px var(--mono); }
+  .agent-note { color: var(--ink-faint); font-size: 12.5px; }
+
+  /* ---------- narrow screens ---------- */
+  /* Behind the open drawer: dims the page and takes the tap that closes the
+     drawer, so that tap cannot also press whatever lies underneath. */
+  .scrim { display: none; }
+  /* Below this the sidebar becomes a drawer behind the ☰ button, and the
+     tables get the full width: beside a sidebar they spilled out of their
+     cards. The script's DRAWER query holds the same width. */
+  @media (max-width: 1000px) {
+    .topbar { padding-left: 8px; }
+    .menu-btn { display: inline-grid; }
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    nav {
+      position: fixed; top: var(--bar); left: 0; bottom: 0; z-index: 58; height: auto;
+      width: min(300px, 86vw); padding-top: 14px;
+      background: var(--bg); border-radius: 0 24px 24px 0; box-shadow: var(--shadow-pop);
+      visibility: hidden; transform: translateX(-104%);
+      transition: transform .2s ease, visibility 0s .2s;
+    }
+    body.nav-open nav { visibility: visible; transform: none; transition: transform .2s ease, visibility 0s; }
+    body.nav-open .scrim { display: block; position: fixed; inset: var(--bar) 0 0; z-index: 57;
+                           background: rgb(20 21 16 / .2); }
+    /* Under the drill-down the layout is inert, drawer included, so the ☰
+       that opens it hides. */
+    body.locked .menu-btn { visibility: hidden; }
+    main { padding: 10px 24px 56px; }
+  }
+  /* Phones: a view opens on its own content, and the chat takes the screen. */
+  @media (max-width: 600px) {
+    main { padding: 6px 16px 48px; }
+    .title h2 { font-size: 28px; }
+    .drill-head { padding: 0 16px; }
+    .drill-head h2 { font-size: 21px; }
+    .drill-body { padding: 16px 16px 48px; }
+    #agent, #agent.full { inset: var(--bar) 8px 8px; width: auto; }
+    /* It already fills the screen, so full screen would change nothing. */
+    #agentFull { display: none; }
+  }
+  /* The pill keeps the words and drops the shortcut, which a phone has no
+     keys for. A rule's pattern gets a line of its own. */
+  @media (max-width: 520px) {
+    .ask { min-width: 0; flex: 0 1 auto; }
+    .ask kbd { display: none; }
+    .brand { font-size: 18px; }
+    .card.hero .v { font-size: 28px; }
+    form.holding.rule-form { grid-template-columns: 1fr; }
+  }
+  /* Whoever asked the system for less motion gets none. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
 </style>
 </head>
 <body>
-<div id="agent">
-  <button id="agentFull" type="button" aria-label="Full screen" aria-pressed="false" title="Full screen">
-    <svg class="grow" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none"
-         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M10 2h4v4M14 2 9 7M6 14H2v-4M2 14l5-5"/></svg>
-    <svg class="shrink" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none"
-         stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M13 7H9V3M9 7l5-5M3 9h4v4M7 9l-5 5"/></svg>
+<header class="topbar">
+  <button class="icon-btn menu-btn" id="menuBtn" type="button" aria-label="Menu"
+          aria-expanded="false" aria-controls="sidebar">
+    <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true" fill="none"
+         stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/></svg>
   </button>
+  <div class="brand">Finance Book</div>
+  <!-- Opens the chat panel. ⌘K does the same from anywhere. -->
+  <button class="ask" id="askBtn" type="button" aria-expanded="false" aria-controls="agent"
+          title="Ask about your money (⌘K)">
+    <svg class="spark" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor">
+      <path d="M7 1.5c.4 3 1.6 4.2 4.6 4.6-3 .4-4.2 1.6-4.6 4.6-.4-3-1.6-4.2-4.6-4.6 3-.4 4.2-1.6 4.6-4.6z"/>
+      <path d="M12.4 9.6c.2 1.5.8 2.1 2.3 2.3-1.5.2-2.1.8-2.3 2.3-.2-1.5-.8-2.1-2.3-2.3 1.5-.2 2.1-.8 2.3-2.3z"/></svg>
+    <span class="ask-label">Ask about your money</span>
+    <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+    <kbd>⌘K</kbd>
+  </button>
+</header>
+<aside id="agent" aria-label="Ask about your money">
+  <div class="agent-head">
+    <h2>Ask about your money</h2>
+    <button class="icon-btn" id="agentFull" type="button" aria-label="Full screen" aria-pressed="false" title="Full screen">
+      <svg class="grow" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none"
+           stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 2h4v4M14 2 9 7M6 14H2v-4M2 14l5-5"/></svg>
+      <svg class="shrink" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none"
+           stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13 7H9V3M9 7l5-5M3 9h4v4M7 9l-5 5"/></svg>
+    </button>
+    <button class="icon-btn" id="agentClose" type="button" aria-label="Close" title="Close (Esc)">
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none"
+           stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg>
+    </button>
+  </div>
   <div id="agentLog"></div>
+  <div class="agent-empty">
+    <strong>What would you like to know?</strong>
+    <span>It reads your transactions, without account numbers, and changes nothing until you click Apply.</span>
+  </div>
   <form id="agentForm">
     <textarea id="agentInput" rows="1" placeholder="Ask about your money…"
               aria-label="Ask the analysis agent"></textarea>
     <div class="agent-controls">
-      <span id="agentSpin" aria-hidden="true" hidden></span>
+      <span id="agentSpin" class="dots" aria-hidden="true" hidden><i></i><i></i><i></i></span>
       <button id="agentStop" type="button" hidden>Stop</button>
       <button id="agentSend" type="submit" hidden>Send</button>
     </div>
   </form>
-</div>
+</aside>
 <div class="layout">
-  <nav id="sidebar"></nav>
+  <div class="scrim" id="scrim"></div>
+  <nav id="sidebar" aria-label="Views and accounts"></nav>
   <main>
     <div id="ledger">
     <div class="title">
@@ -735,6 +863,8 @@
     </div>
     <div class="panel report" id="uploadReport" hidden></div>
 
+    <!-- The year and date range filter everything below, so they come first. -->
+    <div class="years" id="years"></div>
     <div class="cards" id="cards"></div>
 
     <div class="charts">
@@ -750,7 +880,6 @@
       </div>
     </div>
 
-    <div class="years" id="years"></div>
     <div id="tables"></div>
     </div>
 
@@ -770,7 +899,7 @@
   </div>
   <div class="drill-body" id="drillBody"></div>
 </div>
-<!-- Suggestions for the category editors and the add row. render() fills it. -->
+<!-- Suggestions for the category editors and the add form. takeData() fills it. -->
 <datalist id="categories"></datalist>
 
 
@@ -829,20 +958,36 @@ const dayLabel = day => {
   const [y, m, d] = day.split("-");
   return `${+d} ${MONTHS[+m - 1]} ${y}`;
 };
-const LIGHT = matchMedia("(prefers-color-scheme: light)");
+const DARK = matchMedia("(prefers-color-scheme: dark)");
 // Dozens of categories have to be told apart at a glance, so hues are spread by
 // the golden angle over the alphabetical list, DATA.categories. Hashing the
-// name collided badly. Uncategorised is faint: it means "missing", not a kind
-// of thing.
-function colourFor(name) {
+// name collided badly. Uncategorised is neutral: it means "missing", not a
+// kind of thing.
+const hueOf = name => {
   const i = name && name !== "Uncategorised" ? DATA.categories.indexOf(name) : -1;
-  if (i < 0) return css("--ink-faint");
-  // OKLCH, not HSL, so the hues come out close to one lightness and one badge
-  // label reads on all of them. HSL's yellows are far lighter than its blues.
-  // The label is the ground colour, so the fills are light on dark and deep
-  // on light. Each mode's values keep the label over 4.5:1 on every hue.
-  const [even, odd, chroma] = LIGHT.matches ? [0.49, 0.44, 0.17] : [0.72, 0.67, 0.15];
-  return oklch(i % 2 ? odd : even, chroma, i * 137.508 % 360);
+  return i < 0 ? null : {i, h: i * 137.508 % 360};
+};
+
+// A category's colour in the charts, swatches and bars: a mid pastel, deep
+// enough to read on the surface. OKLCH, not HSL, so every hue comes out at
+// one lightness; HSL's yellows are far lighter than its blues. Neighbours
+// alternate a step in lightness, so two close hues still differ.
+function colourFor(name) {
+  const hue = hueOf(name);
+  if (!hue) return css("--neutral");
+  const [even, odd, chroma] = DARK.matches ? [0.68, 0.64, 0.10] : [0.72, 0.68, 0.115];
+  return oklch(hue.i % 2 ? odd : even, chroma, hue.h);
+}
+
+// A category's pill, and the drill-down's band: a pale fill with a dark ink
+// of the same hue, or a deep fill with a light ink in dark mode. The ink
+// holds 8:1 on its fill for every hue. Uncategorised gets no style, so it
+// takes the neutral pill.
+function tagStyle(name) {
+  const hue = hueOf(name);
+  if (!hue) return "";
+  const [fill, ink] = DARK.matches ? [[0.34, 0.05], [0.90, 0.06]] : [[0.92, 0.05], [0.36, 0.08]];
+  return `--tag:${oklch(...fill, hue.h)};--tag-ink:${oklch(...ink, hue.h)}`;
 }
 
 // An OKLCH colour as #rrggbb, with Björn Ottosson's OKLab matrices. Chart.js
@@ -923,85 +1068,96 @@ function totals(rows) {
   return {income, spend, net: income - spend, count: rows.length};
 }
 
-// Green for a surplus, red for a loss, neither for zero. The Net and cashflow
-// balance cards use it: Money in is always green and Money out always ink.
+// Green for a surplus, red for a loss, neither for zero. The Net and End of
+// period cards use it.
 const tone = n => n > 0 ? "gain" : n < 0 ? "loss" : "even";
 
 // ---------- sidebar ----------
+// Line icons for the views, on a 16px grid, each on a small tile.
+const ICONS = {
+  all: '<rect x="2" y="2" width="5" height="5" rx="1.5"/><rect x="9" y="2" width="5" height="5" rx="1.5"/>'
+    + '<rect x="2" y="9" width="5" height="5" rx="1.5"/><rect x="9" y="9" width="5" height="5" rx="1.5"/>',
+  analysis: '<path d="M8 2.2a5.8 5.8 0 1 0 5.8 5.8H8z"/><path d="M10.2 1.6a4.6 4.6 0 0 1 4.2 4.2h-4.2z"/>',
+  cashflow: '<path d="M1.8 11.5 5.6 7.7l2.8 2.6 5.8-6.1"/><path d="M10.6 4.2h3.6v3.6"/>',
+  holdings: '<rect x="2.5" y="7" width="11" height="7" rx="2"/><path d="M5 7V5.2a3 3 0 0 1 6 0V7"/>',
+  investments: '<path d="M8 14.2V7.6"/><path d="M8 8.6C8 5.5 6.2 3.8 2.8 3.8c0 3.1 1.9 4.8 5.2 4.8z"/>'
+    + '<path d="M8 10.4c0-2.8 1.7-4.4 4.9-4.4 0 2.8-1.7 4.4-4.9 4.4z"/>',
+  rules: '<path d="M2.4 8.3V3.2a.8.8 0 0 1 .8-.8h5.1l5.4 5.4-5.9 5.9z"/><circle cx="5.6" cy="5.6" r="1.1"/>',
+};
+const icon = (key, fill = "") => `<span class="ico${fill && " tone-" + fill}"><svg viewBox="0 0 16 16"
+    width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5"
+    stroke-linecap="round" stroke-linejoin="round">${ICONS[key]}</svg></span>`;
+
+// On narrow screens the sidebar is a drawer behind the ☰ in the top bar,
+// over a scrim. Picking a view, Esc, or a tap on the scrim closes it. The
+// focus goes into the drawer with it, and back out to ☰ when it closes,
+// since a hidden drawer cannot keep it.
+function navOpen(open) {
+  const nav = document.getElementById("sidebar"), menu = document.getElementById("menuBtn");
+  if (open === document.body.classList.contains("nav-open")) return;
+  document.body.classList.toggle("nav-open", open);
+  menu.setAttribute("aria-expanded", String(open));
+  if (open) nav.querySelector('[aria-current="true"]')?.focus();
+  else if (nav.contains(document.activeElement)) menu.focus();
+}
+document.getElementById("menuBtn").onclick = () => navOpen(!document.body.classList.contains("nav-open"));
+document.getElementById("scrim").onclick = () => navOpen(false);
+// The drawer only exists below this width, the same as the stylesheet's.
+// Widening the window past it must not leave the drawer open unseen, where
+// it would take the next Esc.
+const DRAWER = matchMedia("(max-width: 1000px)");
+DRAWER.addEventListener("change", () => navOpen(false));
+
 function renderSidebar() {
   const banks = {};
   for (const a of DATA.accounts) (banks[a.bank] ||= []).push(a);
   const nav = document.getElementById("sidebar");
-  nav.innerHTML = "";
-
-  // The total of the bank accounts listed below. Term deposits and investments
-  // have their own items under Setup, so they are not counted here too.
-  const all = document.createElement("div");
-  all.className = "group";
+  // One item. Every item but a bank account carries an icon tile.
+  const item = (id, name, bal, ico = "", title = "") => `<button data-id="${id}"
+      aria-current="${state.account === id}"${title && ` title="${title}"`}>${ico}
+      <span class="name">${esc(name)}</span>${bal === "" ? "" : `<span class="bal">${bal}</span>`}</button>`;
+  const group = (caption, items) =>
+    `<div class="group">${caption && `<div class="caption">${esc(caption)}</div>`}${items}</div>`;
   const low = freeCash();     // the lowest the projection goes, for the Cashflow item
-  all.innerHTML = `<button data-id="all" aria-current="${state.account === "all"}">
-      <span class="name">All accounts</span>
-      <span class="bal num">${compact(accountsTotal())}</span></button>
-    <button data-id="analysis" aria-current="${state.account === "analysis"}">
-      <span class="name">Spending analysis</span></button>
-    <button data-id="cashflow" aria-current="${state.account === "cashflow"}">
-      <span class="name">Cashflow</span>
-      <span class="bal num" title="Free cash: the lowest the projection goes in the period">${
-        low ? compact(low.amount) : "—"}</span></button>`;
-  nav.append(all);
-
-  for (const [bank, list] of Object.entries(banks)) {
-    const group = document.createElement("div");
-    group.className = "group";
-    group.innerHTML = `<div class="caption">${esc(bank)}</div>` + list.map(a => `
-      <button data-id="${a.id}" aria-current="${state.account === a.id}">
-        <span class="name">${esc(a.label)}</span>
-        <span class="bal num">${a.balance === null ? "—" : compact(a.balance)}</span>
-      </button>`).join("");
-    nav.append(group);
-  }
-  const other = document.createElement("div");
-  other.className = "group";
-  other.innerHTML = `<div class="caption">Setup</div>
-    <button data-id="holdings" aria-current="${state.account === "holdings"}">
-      <span class="name">Term deposits</span>
-      <span class="bal num">${totalOf("term deposit") ? compact(totalOf("term deposit")) : "add"}</span>
-    </button>
-    <button data-id="investments" aria-current="${state.account === "investments"}">
-      <span class="name">Investments</span>
-      <span class="bal num">${totalOf("investment") ? compact(totalOf("investment")) : "add"}</span>
-    </button>
-    <button data-id="rules" aria-current="${state.account === "rules"}">
-      <span class="name">Rules</span>
-      <span class="bal num">${DATA.rules.length || "add"}</span>
-    </button>`;
-  nav.append(other);
-
-  const foot = document.createElement("div");
-  foot.className = "foot";
+  const held = kind => totalOf(kind) ? compact(totalOf(kind)) : "add";
   // Real rows only, so the count still matches what the bank has. The plans
-  // are counted apart, with the toggle that hides them from every view.
+  // are counted apart, with the switch that hides them from every view.
   const plans = DATA.all.length - DATA.real.length;
-  foot.innerHTML =
-    `<div>${DATA.real.length.toLocaleString()} transactions`
-    + ` across ${DATA.accounts.length} accounts`
-    + (plans ? ` · ${plural(plans, "what-if")} <button class="whatif-toggle" type="button"
-        aria-label="${state.whatif ? "Hide" : "Show"} what-ifs">${state.whatif ? "hide" : "show"}</button>` : "")
-    + `</div>`
-    + `<div>Exported ${esc(stamp(DATA.generated_at))}</div>`;
-  nav.append(foot);
-  const toggle = foot.querySelector(".whatif-toggle");
+
+  // All accounts totals the bank accounts listed below it. Term deposits and
+  // investments have their own items under Holdings, so they are not counted
+  // there too.
+  nav.innerHTML =
+    group("", item("all", "All accounts", compact(accountsTotal()), icon("all", "blue"))
+      + item("analysis", "Spending analysis", "", icon("analysis", "coral"))
+      + item("cashflow", "Cashflow", low ? compact(low.amount) : "—", icon("cashflow", "mint"),
+             "Free cash: the lowest the projection goes in the period"))
+    + Object.entries(banks).map(([bank, list]) => group(bank, list.map(a =>
+        item(a.id, a.label, a.balance === null ? "—" : compact(a.balance))).join(""))).join("")
+    + group("Holdings", item("holdings", "Term deposits", held("term deposit"), icon("holdings", "yellow"))
+      + item("investments", "Investments", held("investment"), icon("investments", "pink")))
+    + group("Setup", item("rules", "Rules", DATA.rules.length || "add", icon("rules")))
+    + `<div class="foot">
+        <div>${DATA.real.length.toLocaleString()} transactions across ${DATA.accounts.length} accounts</div>
+        ${plans ? `<button class="whatif-toggle" type="button" role="switch" aria-checked="${state.whatif}">
+          <span class="switch" aria-hidden="true"></span>Show ${plural(plans, "what-if")}</button>` : ""}
+        <div>Exported ${esc(stamp(DATA.generated_at))}</div>
+      </div>`;
+  const toggle = nav.querySelector(".whatif-toggle");
   if (toggle) toggle.onclick = () => {
     state.whatif = !state.whatif;
     render();
-    // render() rebuilt the sidebar. Focus the new copy of the toggle.
+    // render() rebuilt the sidebar. Focus the new copy of the switch.
     nav.querySelector(".whatif-toggle").focus({preventScroll: true});
   };
 
-  // Only the view buttons: the toggle above is a button in the same nav.
+  // Only the view buttons: the switch above is a button in the same nav.
   nav.querySelectorAll("button[data-id]").forEach(b => b.onclick = () => {
     const before = state.account;
+    // Picked from the drawer, which closes and hands the focus to ☰.
+    const fromDrawer = document.body.classList.contains("nav-open");
     state.account = b.dataset.id === "all" || TABS.includes(b.dataset.id) ? b.dataset.id : +b.dataset.id;
+    navOpen(false);
     // The chosen year or range carries over. renderYears drops a year the new
     // account has no rows for.
     render();
@@ -1009,7 +1165,7 @@ function renderSidebar() {
     if (state.account !== before) window.scrollTo(0, 0);
     // render() rebuilt the sidebar. Focus the new copy of this item, so
     // pressing Enter does not drop keyboard focus back to the page.
-    nav.querySelector(`button[data-id="${b.dataset.id}"]`).focus({preventScroll: true});
+    if (!fromDrawer) nav.querySelector(`button[data-id="${b.dataset.id}"]`).focus({preventScroll: true});
   });
 }
 
@@ -1030,34 +1186,46 @@ function renderSummary() {
       ? `${view.length} accounts · ${DATA.real.length.toLocaleString()} transactions`
       : `${view[0].bank} · ${view[0].bsb ? view[0].bsb + "-" : ""}${view[0].number} · ${view[0].count.toLocaleString()} transactions`;
 
-  const card = (label, value, cls, note) =>
-    `<div class="card"><div class="caption">${label}</div>
-       <div class="v num ${cls || ""}">${value}</div>
-       ${note ? `<div class="note">${note}</div>` : ""}</div>`;
-
   // On All accounts the first card is net worth, where it can say what it is
   // made of. A single account shows its own balance instead, or a dash when
   // no statement has stated one, as the sidebar does.
   const byKind = Object.entries(KINDS)
-    .map(([kind, meta]) => [meta.title.toLowerCase(), totalOf(kind)])
+    .map(([kind, meta]) => [meta.title, totalOf(kind)])
     .filter(([, total]) => total);
   // Every balance is as at its own latest statement or entry, so the total
   // mixes dates. The oldest one says how far behind it can be.
   const oldest = [...DATA.accounts, ...DATA.holdings].map(x => x.as_at).filter(Boolean).sort()[0];
   const first = state.account === "all"
-    ? card("Net worth", money(netWorth()), "", (byKind.length
-        ? [`${money(balance)} in accounts`,
-           ...byKind.map(([label, total]) => `${money(total)} in ${label}`)].join(" · ")
-        : "across every account") + (oldest ? ` · oldest balance as at ${esc(oldest)}` : ""))
-    : card("Balance", view[0].balance === null ? "—" : money(view[0].balance), "",
-           view[0].as_at ? "as at " + esc(view[0].as_at) : "");
+    ? card("Net worth", money(netWorth()), {fill: "blue", hero: true,
+        note: byKind.length ? "" : "across every account",
+        parts: byKind.length ? [["In accounts", money(balance)],
+                                ...byKind.map(([label, total]) => [label, money(total)])] : [],
+        foot: oldest ? "oldest balance as at " + esc(dayLabel(oldest)) : ""})
+    : card("Balance", view[0].balance === null ? "—" : money(view[0].balance), {fill: "blue", hero: true,
+        note: view[0].as_at ? "as at " + esc(dayLabel(view[0].as_at)) : ""});
 
   document.getElementById("cards").innerHTML =
     first +
-    card("Money in", money(sum.income), "in", `${period} · excludes transfers`) +
-    card("Money out", money(sum.spend), "out", `${period} · excludes transfers`) +
-    card("Net", money(sum.net, true), tone(sum.net), `${period} · in minus out`);
+    card("Money in", money(sum.income), {fill: "mint", note: `${period} · excludes transfers`}) +
+    card("Money out", money(sum.spend), {fill: "coral", note: `${period} · excludes transfers`}) +
+    card("Net", money(sum.net, true), {cls: tone(sum.net), note: `${period} · in minus out`});
   document.getElementById("upload").hidden = state.account !== "all";
+}
+
+// One card in a bento row. `fill` paints it a pastel and `hero` makes it
+// the wide first card. `cls` is gain, loss or even to colour the figure, or
+// text for a name. `parts`
+// are [label, figure] pairs shown side by side under it, and `foot` a last
+// quiet line.
+function card(label, value, {fill = "", hero = false, cls = "", note = "", parts = [], foot = ""} = {}) {
+  return `<div class="card${hero ? " hero" : ""}${fill && " tone-" + fill}">
+      <div class="caption">${label}</div>
+      <div class="v num ${cls}">${value}</div>
+      ${note && `<div class="note">${note}</div>`}
+      ${parts.length ? `<div class="parts">${parts.map(([name, figure]) =>
+        `<div><span>${name}</span><span>${figure}</span></div>`).join("")}</div>` : ""}
+      ${foot && `<div class="note">${foot}</div>`}
+    </div>`;
 }
 
 // ---------- uploading statements ----------
@@ -1072,10 +1240,12 @@ const readUpload = file => new Promise((resolve, reject) => {
   reader.readAsDataURL(file);
 });
 
-// The panel under the title, which stays until it is closed.
-function showPanel(html) {
+// The panel under the title, which stays until it is closed. Its pastel says
+// how it went: mint loaded, yellow waiting on you, coral failed.
+function showPanel(html, fill) {
   const panel = document.getElementById("uploadReport");
-  panel.innerHTML = `<button class="rowbtn close" type="button">close</button>${html}`;
+  panel.className = "panel report tone-" + fill;
+  panel.innerHTML = `<button class="icon-btn close" type="button" aria-label="Close" title="Close">✕</button>${html}`;
   panel.hidden = false;
   panel.querySelector(".close").onclick = () => { panel.hidden = true; };
   return panel;
@@ -1098,7 +1268,7 @@ async function upload(files, account = null) {
   } catch (e) {
     // A file that could not be read, a refused request, or the server's own
     // error, which says so when the files were saved all the same.
-    showPanel(`<h3>Something went wrong</h3><p>${esc(e.message)}</p>`);
+    showPanel(`<h3>Something went wrong</h3><p>${esc(e.message)}</p>`, "coral");
   } finally {
     button.disabled = false;
     button.textContent = "Upload statements";
@@ -1130,7 +1300,8 @@ function showReport({status, report}, files) {
     : status === 4 ? "An ANZ CSV export has no account number, and too few of its rows are known to tell."
     : "The report below says which file and why. A file that fails its checks writes nothing."
       + " An ANZ CSV export skipped for its account can be uploaded on its own to choose it.";
-  const panel = showPanel(`<h3>${heading}</h3><p>${note}</p>${ask}<pre>${esc(report)}</pre>`);
+  const panel = showPanel(`<h3>${heading}</h3><p>${note}</p>${ask}<pre>${esc(report)}</pre>`,
+                          status === 0 ? "mint" : status === 4 ? "yellow" : "coral");
   const form = panel.querySelector("form");
   if (form) form.onsubmit = event => {
     event.preventDefault();
@@ -1157,30 +1328,38 @@ function draw(id, config) {
 
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
-// Chart.js ships Helvetica, faint black gridlines and a black tooltip, none of
-// which fit this palette. Set as defaults from the
-// page's tokens, so a chart that passes its own `scales`, and so replaces
-// baseOptions' scales whole, still matches.
-Chart.defaults.font.family = css("--mono");
-Chart.defaults.scale.ticks.font = {size: 11};
-// Legends list category names, which the page sets in sans. Mono is wider: a
-// long legend wrapped to an extra row, and the shorter plot dropped every
-// other axis label, $0 among them.
-Chart.defaults.plugins.legend.labels.font = {family: css("--sans")};
+// Chart.js ships Helvetica, black gridlines and a black tooltip, none of
+// which fit this palette. Set as defaults from the page's tokens, so a chart
+// that passes its own `scales`, and so replaces baseOptions' scales whole,
+// still matches.
+Chart.defaults.font.family = css("--sans");
+Chart.defaults.font.size = 11.5;
 function chartColours() {
   Chart.defaults.color = css("--ink-faint");      // tick and legend text
   Chart.defaults.borderColor = css("--line");     // gridlines and axis borders
+  // A white rounded card, like the rest of the page.
   Object.assign(Chart.defaults.plugins.tooltip, {
-    backgroundColor: css("--hover"),
-    titleColor: css("--ink-dim"), bodyColor: css("--ink"), multiKeyBackground: css("--hover"),
+    backgroundColor: css("--panel"), borderColor: css("--line"), borderWidth: 1,
+    titleColor: css("--ink-faint"), bodyColor: css("--ink"), multiKeyBackground: css("--panel"),
+    titleFont: {weight: "500"}, cornerRadius: 12, padding: 10, boxPadding: 4, usePointStyle: true,
   });
 }
 chartColours();
+// Every bar is rounded all round, and never wider than a thumb, so a chart of
+// three months does not draw three slabs. A hairline of the surface along
+// each top edge keeps stacked pieces apart. Only the top: a border all round
+// ate a thin bar down to nothing.
+const barStyle = () => ({borderRadius: 6, borderSkipped: false, maxBarThickness: 28,
+                         borderColor: css("--panel"), borderWidth: {top: 1.5}});
+// Every line is the one blue, with a soft wash under it and a dot only under
+// the pointer.
+const lineStyle = () => ({borderColor: css("--line-chart"), backgroundColor: css("--line-chart") + "1f",
+                          fill: true, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 5, tension: 0.3});
 // The stylesheet follows a switch between light and dark by itself. The
 // charts and the category fills take colours from the script, so they are
 // set again and the page redrawn. Not while you are typing in the page: a
 // redraw rebuilds its forms. The next render, after the save, catches up.
-LIGHT.addEventListener("change", () => {
+DARK.addEventListener("change", () => {
   chartColours();
   const typing = document.querySelector(
     ":is(main, #drill) :is(input:not([type=checkbox]), textarea, select):focus");
@@ -1199,25 +1378,19 @@ function baseOptions(extra = {}) {
   const options = Object.assign({
     responsive: true, maintainAspectRatio: false,
     plugins: {
-      legend: {labels: {color: css("--ink-dim"), boxWidth: 10, boxHeight: 10, usePointStyle: true}},
+      legend: {labels: {color: css("--ink-dim"), boxWidth: 8, boxHeight: 8, padding: 14,
+                        usePointStyle: true, pointStyle: "circle"}},
       // Math.abs: the flow chart plots spending downwards, which is a drawing
       // decision. Leaking it into the text showed a negative "Out" figure beside a
       // "Money out" card reading the same figure unsigned.
       tooltip: {callbacks: {label: c => `${c.dataset.label}: ${money(Math.abs(c.parsed.y))}`}},
     },
+    interaction: {mode: "index", intersect: false},
     scales: {
       x: {grid: {display: false}, ticks: {maxRotation: 0, autoSkipPadding: 16}},
       y: {border: {display: false}, ticks: {callback: moneyTick}},
     },
   }, extra);
-
-  // Chart.js matches the pointer along one axis, and that axis defaults to "x".
-  // On a horizontal bar chart the categories run down the y axis, so the
-  // default picked whichever bar the pointer's *horizontal* position lined up
-  // with, so the tooltip and the click both landed on the wrong category.
-  // Derive it from indexAxis so this cannot be got wrong again.
-  options.interaction = extra.interaction ||
-    {mode: "index", intersect: false, axis: options.indexAxis === "y" ? "y" : "x"};
   return options;
 }
 
@@ -1236,13 +1409,13 @@ function renderCharts() {
     data: months.map(m => perMonth(m)
       .filter(t => t.type === "income" && (t.category || null) === name)
       .reduce((n, t) => n + t.amount, 0)),
-    backgroundColor: name ? colourFor(name) : css("--in"),
-    stack: "in", borderRadius: 0,
+    backgroundColor: name ? colourFor(name) : css("--in-bar"),
+    stack: "in", ...barStyle(),
   })).filter(d => d.data.some(v => v));
   draw("flowChart", {
     type: "bar",
     data: {labels: months.map(MONTH_LABEL), datasets: [...incomeSets, {
-      label: "Out", stack: "out", borderRadius: 0, backgroundColor: css("--out"),
+      label: "Out", stack: "out", ...barStyle(), backgroundColor: css("--neutral"),
       data: months.map(m => -totals(perMonth(m)).spend),
     }]},
     options: baseOptions({scales: {
@@ -1278,9 +1451,7 @@ function renderCharts() {
   draw("balChart", {
     type: "line",
     data: {labels: months.map(MONTH_LABEL), datasets: [{
-      label: "Balance", data: series, borderColor: css("--ink"),
-      backgroundColor: "transparent", borderWidth: 2, pointRadius: 0,
-      pointHoverRadius: 4, tension: 0.25,
+      label: "Balance", data: series, ...lineStyle(),
     }]},
     options: baseOptions({plugins: {legend: {display: false},
       tooltip: {callbacks: {label: c => money(c.parsed.y)}}}}),
@@ -1306,12 +1477,12 @@ function renderYears() {
     box.querySelectorAll("button").forEach(b => b.setAttribute("aria-current", current(b.dataset.y)));
     return years;
   }
-  box.innerHTML = years.map(y =>
-    `<button data-y="${y}" aria-current="${state.year === y}">${y}</button>`).join("")
-    // All years means no filter at all, so a range showing takes the light off it.
-    + `<button data-y="" aria-current="${state.year === null && !state.from && !state.to}">All years</button>`
-    + `<label><input type="date" class="range-from" aria-label="From" value="${state.from || ""}"></label>`
-    + `<label><input type="date" class="range-to" aria-label="To" value="${state.to || ""}"></label>`;
+  // All years means no filter at all, so a range showing takes the light off it.
+  box.innerHTML = `<div class="seg" role="group" aria-label="Year">${years.map(y =>
+      `<button data-y="${y}" aria-current="${current(y)}">${y}</button>`).join("")}`
+    + `<button data-y="" aria-current="${current("")}">All years</button></div>`
+    + `<label class="field">From <input type="date" class="range-from" aria-label="From" value="${state.from || ""}"></label>`
+    + `<label class="field">To <input type="date" class="range-to" aria-label="To" value="${state.to || ""}"></label>`;
   box.querySelectorAll("button").forEach(b => b.onclick = () => {
     // A year replaces the range, and All years clears both.
     state.year = b.dataset.y || null;
@@ -1346,7 +1517,9 @@ const CHEVRON = `<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="tr
 </svg>`;
 
 // Everything about a row that is worth searching, in one lowercase string.
-// Commas come out so "1234" finds "-$1,234.56"; the amount goes in both
+// Dates go in as stored, "2026-09-16": a month's name would match every row
+// of that month, so "may" could not find Mayfield. Commas come out so "1234"
+// finds "-$1,234.56"; the amount goes in both
 // formatted and plain so "-1234.56" and "1234.56" both land. The running
 // balance stays out, or "50.00" would also find every row that left $50.00 in
 // the account, and count it in the caption totals. "what-if" finds the plans.
@@ -1432,7 +1605,7 @@ function tableBody(rows, {column, hideCategory}) {
     return `<tr class="${t.whatif ? "whatif" : t.provisional ? "provisional" : ""}" data-id="${t.id}"
         data-series="${t.series || 0}" tabindex="0">
       <td class="date num"${t.manual ? ' data-edit="date"' : ""}>${t.manual
-          ? '<button class="rowbtn del" type="button" aria-label="Delete this row" title="Delete">×</button>' : ""}${day(t)}</td>
+          ? '<button class="rowbtn del" type="button" aria-label="Delete this row" title="Delete">×</button>' : ""}${dayLabel(day(t))}</td>
       <td class="desc" data-edit="description" title="${esc(t.description)}">${esc(t.description)}</td>
       <td class="tags" data-edit="category">${t.whatif
           ? `<span class="tag whatif" title="${t.covered
@@ -1441,9 +1614,9 @@ function tableBody(rows, {column, hideCategory}) {
           : t.covered
           ? `<span class="tag whatif" title="The bank's rows now cover this day. Delete this row if the bank lists it, or it is counted twice.">covered</span> `
           : t.provisional
-          ? `<span class="tag" title="The bank has not confirmed this row yet, so it may still change.">provisional</span> `
+          ? `<span class="tag pending" title="The bank has not confirmed this row yet, so it may still change.">provisional</span> `
           : ""}<span class="tag ${cls}" data-edit="type">${esc(t.type)}</span>${t.category && !hideCategory
-          ? ` <span class="tag cat" title="${esc(t.category)}" style="--tag:${colourFor(t.category)}">${esc(t.category)}</span>` : ""}</td>
+          ? ` <span class="tag cat" title="${esc(t.category)}" style="${tagStyle(t.category)}">${esc(t.category)}</span>` : ""}</td>
       <td class="r amt num ${cls}"${t.manual ? ' data-edit="amount"' : ""}>${money(t.amount, true)}</td>
       ${last}
     </tr>`;
@@ -1464,7 +1637,7 @@ function tableMeta(rows) {
 // `fold` is true or false for a table that can collapse, open or collapsed,
 // and left out for one that cannot. A collapsed table gets no rows: setOpen
 // builds them when it opens, so All accounts only draws what is on screen.
-// `add` puts "+ add" in the caption and an add form row in the head.
+// `add` puts "+ Add" in the caption and an add form row in the head.
 function transactionTable(title, rows, {column = "balance", hideCategory = false, key = "drill", fold, add = false} = {}) {
   const opts = {column, hideCategory};
   tables.set(String(key), {rows, opts});
@@ -1480,7 +1653,7 @@ function transactionTable(title, rows, {column = "balance", hideCategory = false
               title="Search these transactions">${SEARCH_ICON}</button>
       <input class="find" type="search" placeholder="Search…" hidden
              aria-label="Search these transactions">
-      ${add ? '<button class="rowbtn addbtn" type="button" title="Add a transaction or a what-if">+ add</button>' : ""}
+      ${add ? '<button class="rowbtn addbtn" type="button" title="Add a transaction or a what-if">+ Add</button>' : ""}
       <span class="meta">${tableMeta(rows)}</span>
     </div></td></tr>
     ${add ? '<tr class="add" hidden></tr>' : ""}
@@ -1514,7 +1687,7 @@ function renderTables() {
   // with no rows in it.
   const view = accountsInView().filter(a => viewRows(a.id).length);
   out.innerHTML = view.length
-    ? view.map(tableFor).join('<div style="height:var(--gap)"></div>')
+    ? view.map(tableFor).join("")
     : '<div class="tablewrap"><div class="empty">No transactions in this period</div></div>';
 }
 
@@ -1532,7 +1705,7 @@ const KINDS = {
 // Deposits never reconcile to the cent, and the reasons are worth spelling
 // out rather than leaving as an unexplained gap.
 function depositExplainer(held) {
-  // Real rows, whatever the toggle: a planned deposit is not on deposit.
+  // Real rows, whatever the what-if switch: a planned deposit is not on deposit.
   const of = name => DATA.real.filter(t => t.category === name);
   const into = of("Term deposit").filter(t => t.amount < 0).reduce((n, t) => n + t.amount, 0);
   const back = of("Term deposit").filter(t => t.amount > 0).reduce((n, t) => n + t.amount, 0);
@@ -1598,8 +1771,9 @@ function renderHoldings(kind) {
 
   // An investment balance stands on what you enter. The statements hold no
   // broker transfer to check it against, so the hint says so instead of a
-  // table.
-  const hint = kind === "term deposit" ? depositExplainer(held) : `<div class="hint">
+  // table. Either comes last: what you hold matters more than why.
+  const hint = kind === "term deposit" ? `<div class="charts">${depositExplainer(held)}</div>`
+    : `<div class="hint">
       Anything here is counted in net worth and never in income or spending.
       Nothing in your statements pays a broker, so these balances stand on what
       you enter rather than on anything the app can check.
@@ -1608,7 +1782,7 @@ function renderHoldings(kind) {
   const rows = mine.map(h => `<tr>
       <td>${esc(h.name)}</td>
       <td>${esc(h.institution || "")}</td>
-      <td class="date num">${esc(h.as_at || "")}</td>
+      <td class="date num">${h.as_at ? esc(dayLabel(h.as_at)) : ""}</td>
       <td>${esc(h.note || "")}</td>
       <td class="r amt num">${money(h.balance)}</td>
       <td class="r"><button class="rowbtn" data-edit="${h.id}">edit</button>
@@ -1618,13 +1792,12 @@ function renderHoldings(kind) {
   document.getElementById(meta.tab).innerHTML = `
     <div class="title"><h2>${meta.title}</h2>
       <span class="sub">money you hold that no statement covers</span></div>
-    ${hint}
-    <div class="tablewrap" style="margin-bottom:14px"><div class="tcap"><span class="grp">${meta.title}</span>
+    <div class="tablewrap"><div class="tcap"><span class="grp">${meta.title}</span>
         <span class="meta">${mine.length} entries · total ${money(held)}</span></div><table class="fixed">
       <!-- Name takes the width left over. The other columns are sized to what they
            hold, and Note, nearly always empty, is narrow. -->
       <colgroup><col><col style="width:7rem"><col style="width:7rem"><col style="width:5rem">
-        <col style="width:8rem"><col style="width:7rem"></colgroup>
+        <col style="width:8rem"><col style="width:9rem"></colgroup>
       <thead><tr><th>Name</th><th>Institution</th><th>As at</th><th>Note</th>
         <th class="r">Balance</th><th></th></tr></thead>
       <tbody>${rows || '<tr><td colspan="6" class="empty">Nothing entered yet</td></tr>'}</tbody>
@@ -1634,16 +1807,17 @@ function renderHoldings(kind) {
       <p>Balance in dollars. It is added to net worth, never to income or spending.</p>
       <form class="holding holding-form">
         <input type="hidden" name="id">
-        <div><label>Name</label><input name="name" required placeholder="${meta.name}"></div>
-        <div><label>Institution</label><input name="institution" placeholder="${meta.place}"></div>
-        <div><label>Balance</label><input name="balance" required inputmode="decimal" placeholder="50000.00"></div>
-        <div><label>As at</label><input name="as_at" type="date"></div>
+        <div><label class="caption">Name</label><input name="name" required placeholder="${meta.name}"></div>
+        <div><label class="caption">Institution</label><input name="institution" placeholder="${meta.place}"></div>
+        <div><label class="caption">Balance</label><input name="balance" required inputmode="decimal" placeholder="50000.00"></div>
+        <div><label class="caption">As at</label><input name="as_at" type="date"></div>
         <div style="display:flex;gap:6px">
           <button class="btn" type="submit">Save</button>
           <button class="btn ghost reset-form" type="button">Clear</button>
         </div>
       </form>
-    </div>`;
+    </div>
+    ${hint}`;
 
   const root = document.getElementById(meta.tab);
   const form = root.querySelector(".holding-form");
@@ -1897,23 +2071,19 @@ function wireCategoryTicks(root, listed) {
 // collide between the two copies and only the first would work.
 function controlsHtml() {
   return `<div class="controls">
-      <div><div class="caption" style="margin-bottom:6px">Accounts</div>
-        <div class="picker acct-picker">
-          <label><input type="checkbox" class="all-accts"
-            ${analysis.accounts.size === DATA.accounts.length ? "checked" : ""}> <b>All</b></label>
-          ${DATA.accounts.map(a => `
-            <label><input type="checkbox" data-acct="${a.id}"
-              ${analysis.accounts.has(a.id) ? "checked" : ""}> ${esc(a.label)}</label>`).join("")}
-        </div></div>
-      <div><div class="caption" style="margin-bottom:6px">Period</div>
-        <div class="picker">
-          ${PERIODS.map(p => `<button class="chip period" type="button" data-period="${p.key}"
-            aria-current="${analysis.preset === p.key}">${p.label}</button>`).join("")}
-        </div>
-        <div class="picker" style="margin-top:6px">
-          <label><input type="date" class="from-date" aria-label="From" value="${analysis.from || ""}"></label>
-          <label><input type="date" class="to-date" aria-label="To" value="${analysis.to || ""}"></label>
-        </div></div>
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Period">${PERIODS.map(p => `<button class="period"
+          type="button" data-period="${p.key}" aria-current="${analysis.preset === p.key}">${p.label}</button>`).join("")}</div>
+        <label class="field">From <input type="date" class="from-date" aria-label="From" value="${analysis.from || ""}"></label>
+        <label class="field">To <input type="date" class="to-date" aria-label="To" value="${analysis.to || ""}"></label>
+      </div>
+      <div class="picker acct-picker"><span class="caption">Accounts</span>
+        <label><input type="checkbox" class="all-accts"
+          ${analysis.accounts.size === DATA.accounts.length ? "checked" : ""}> All</label>
+        ${DATA.accounts.map(a => `
+          <label><input type="checkbox" data-acct="${a.id}"
+            ${analysis.accounts.has(a.id) ? "checked" : ""}> ${esc(a.label)}</label>`).join("")}
+      </div>
     </div>`;
 }
 
@@ -1956,7 +2126,7 @@ function wireControls(root) {
 
 // Open, the drill-down is a dialog and the only thing on offer: the layout
 // under it is inert, so Tab and a screen reader cannot wander into it. The
-// chat bar is outside the layout and stays live.
+// top bar and the chat panel are outside the layout and stay live.
 function showDrill(open) {
   document.getElementById("drill").hidden = !open;
   document.body.classList.toggle("locked", open);
@@ -1972,6 +2142,7 @@ function renderDrill(rows, spent, days) {
   const catRows = rows.filter(t => catOf(t) === name);
   const share = (100 * catRows.reduce((n, t) => n - t.amount, 0) / (spent || 1)).toFixed(1);
 
+  panel.querySelector(".drill-head").style.cssText = tagStyle(name);
   document.getElementById("drillName").innerHTML =
     `<span class="swatch" style="background:${colourFor(name)};width:12px;height:12px"></span>${esc(name)}`;
   // A ticked-off category is not in the total, so it has no share of it. The
@@ -1997,7 +2168,7 @@ function closeDrill() {
   analysis.category = null;
   render();
   // Focus goes back to the category's row. preventScroll keeps the page where
-  // it was, since the drill-down may have been opened from the chart instead.
+  // it was, since the drill-down may have been opened by a link or by the agent.
   const row = [...document.querySelectorAll("#analysis tr[data-cat]")].find(r => r.dataset.cat === name);
   if (row) row.focus({preventScroll: true});
 }
@@ -2005,8 +2176,8 @@ function closeDrill() {
 document.getElementById("drillClose").onclick = closeDrill;
 document.addEventListener("keydown", event => {
   // Esc closes one thing at a time, the one on top: a table's search box, then
-  // full screen, then the chat, then the drill-down overlay. One press never
-  // closes two.
+  // full screen, then the chat, then the phone's menu, then the drill-down
+  // overlay. One press never closes two.
   if (event.key !== "Escape") return;
   if (event.target.classList && event.target.classList.contains("find")) {
     const wrap = event.target.closest(".tablewrap");
@@ -2016,11 +2187,13 @@ document.addEventListener("keydown", event => {
   }
   const chat = document.getElementById("agent");
   if (chat.classList.contains("full")) return agentFull(false);
-  if (chat.classList.contains("open") || chat.contains(document.activeElement)) {
+  if (chat.classList.contains("open")) {
     agentOpen(false);
-    if (chat.contains(document.activeElement)) document.activeElement.blur();
+    // Focus was in the panel. It goes to the Ask pill.
+    if (chat.contains(document.activeElement)) document.getElementById("askBtn").focus();
     return;
   }
+  if (document.body.classList.contains("nav-open")) return navOpen(false);
   closeDrill();
 });
 
@@ -2237,7 +2410,7 @@ function edit(target, t) {
 }
 
 // ---------- adding a row ----------
-// "+ add" in a table's caption opens the form row under it: one cell across
+// "+ Add" in a table's caption opens the form row under it: one cell across
 // the table holding the inputs, in the sticky head, so it is in view wherever
 // the page is scrolled. Enter anywhere in it saves; Escape closes it. A table
 // of one account puts the row in that account; one spanning accounts, like
@@ -2277,7 +2450,7 @@ function openAdd(row) {
   row.querySelector("[name=description]").focus({preventScroll: true});
 }
 
-// Escape puts the focus back on "+ add". Collapsing the table does not: the
+// Escape puts the focus back on "+ Add". Collapsing the table does not: the
 // chevron has it, and keeps it.
 function closeAdd(row, refocus = true) {
   row.innerHTML = "";
@@ -2310,7 +2483,7 @@ async function submitAdd(row) {
     return;
   }
   await reload();
-  // reload() rebuilt the table. Focus its "+ add" again, where the row began.
+  // reload() rebuilt the table. Focus its "+ Add" again, where the row began.
   document.querySelector(`.tablewrap[data-table="${key}"] .addbtn`)?.focus({preventScroll: true});
 }
 
@@ -2333,7 +2506,7 @@ document.addEventListener("click", async event => {
     return;
   }
   await reload();
-  // The × went with its row. The table's "+ add" is the nearest thing left
+  // The × went with its row. The table's "+ Add" is the nearest thing left
   // to focus; the drill-down has none.
   document.querySelector(`.tablewrap[data-table="${table}"] .addbtn`)?.focus({preventScroll: true});
 });
@@ -2372,35 +2545,20 @@ function overviewBody(rows, ranked, spent, days, listed, {income, deposits, net}
 
   return `
     <div class="cards">
-      <div class="card"><div class="caption">Income</div>
-        <div class="v num in">${money(income)}</div>
-        <div class="note">${plural(deposits, "deposit")}</div></div>
-      <div class="card"><div class="caption">Total spent</div>
-        <div class="v num out">${money(spent)}</div>
-        <div class="note">${plural(rows.length, "transaction")}</div></div>
-      <div class="card"><div class="caption">Net</div>
-        <div class="v num ${tone(net)}">${money(net, true)}</div>
-        <div class="note">${netNote}</div></div>
-      <div class="card"><div class="caption">Per day</div>
-        <div class="v num">${money(Math.round(spent / days))}</div>
-        <div class="note">over ${plural(Math.round(days), "day")}</div></div>
-      <div class="card"><div class="caption">Per month</div>
-        <div class="v num">${money(Math.round(spent / days * 30.44))}</div>
-        <div class="note">average</div></div>
+      ${card("Total spent", money(spent), {fill: "coral", hero: true, note: plural(rows.length, "transaction")})}
+      ${card("Income", money(income), {fill: "mint", note: plural(deposits, "deposit")})}
+      ${card("Net", money(net, true), {cls: tone(net), note: netNote})}
+      ${card("Per day", money(Math.round(spent / days)), {note: `over ${plural(Math.round(days), "day")}`})}
+      ${card("Per month", money(Math.round(spent / days * 30.44)), {note: "average"})}
     </div>
 
-    <div class="charts">
-      <div class="panel"><h3>Where the money goes</h3>
-        <p>Click a category to see the transactions behind it.</p>
-        <div class="chartbox" style="height:${Math.max(240, ranked.length * 20)}px">
-          <canvas id="catChart"></canvas></div></div>
-      <div class="panel"><h3>By month</h3>
-        <p>Top eight categories, everything else grouped.</p>
-        <div class="chartbox" style="height:380px">
-          <canvas id="catTrend"></canvas></div></div>
-    </div>
+    <div class="panel"><h3>By month</h3>
+      <p>Top eight categories, everything else grouped.</p>
+      <div class="chartbox" style="height:320px"><canvas id="catTrend"></canvas></div></div>
 
-    <div class="tablewrap"><div class="tcap"><span class="grp">Categories</span>
+    <!-- The one place category totals are listed: each with its bar, its
+         share and a tick box, and a click drills in. -->
+    <div class="tablewrap"><div class="tcap"><span class="grp">Where the money goes</span>
         <span class="meta">${money(spent)} across ${ranked.length}${
           allOn ? "" : ` of ${listed.length}`} categories · click a name to drill in</span>
       </div><table class="fixed">
@@ -2436,32 +2594,28 @@ function drillBody(name, rows, days) {
 
   return `
     <div class="cards">
-      <div class="card"><div class="caption">Spent here</div>
-        <div class="v num out">${money(total)}</div>
-        <div class="note">${plural(rows.length, "transaction")}</div></div>
-      <div class="card"><div class="caption">Per month</div>
-        <div class="v num">${money(Math.round(total / days * 30.44))}</div>
-        <div class="note">average over ${plural(Math.round(days), "day")}</div></div>
-      <div class="card"><div class="caption">Typical</div>
-        <div class="v num">${money(middle)}</div>
-        <div class="note">middle transaction</div></div>
-      <div class="card"><div class="caption">Most spent at</div>
-        <div class="v" style="font-size:14px">${
-          top.length ? esc(top[0][0].slice(0, 26)) : "—"}</div>
-        <div class="note">${top.length ? money(top[0][1]) : ""}</div></div>
+      ${card("Spent here", money(total), {fill: "coral", hero: true, note: plural(rows.length, "transaction")})}
+      ${card("Per month", money(Math.round(total / days * 30.44)),
+             {note: `average over ${plural(Math.round(days), "day")}`})}
+      ${card("Typical", money(middle), {note: "middle transaction"})}
+      ${card("Most spent at", top.length ? esc(top[0][0].slice(0, 26)) : "—",
+             {cls: "text", note: top.length ? money(top[0][1]) : ""})}
     </div>
 
-    <div class="panel"><h3>Top places</h3>
-      <p>Where this category's money went, in this selection.</p>
-      <table><tbody>${top.map(([place, amount]) => `<tr>
-        <td>${esc(place)}</td>
-        <td style="width:40%"><span class="bar"><i style="width:${
-          (100 * amount / top[0][1]).toFixed(1)}%;background:${colourFor(name)}"></i></span></td>
-        <td class="r amt num out">${money(amount)}</td></tr>`).join("")}</tbody></table></div>
+    <div class="charts">
+      <div class="panel"><h3>Top places</h3>
+        <p>Where this category's money went, in this selection.</p>
+        <table class="fixed"><colgroup><col><col style="width:30%"><col style="width:7.5rem"></colgroup>
+          <tbody>${top.map(([place, amount]) => `<tr>
+          <td class="clip" title="${esc(place)}">${esc(place)}</td>
+          <td><span class="bar"><i style="width:${
+            (100 * amount / top[0][1]).toFixed(1)}%;background:${colourFor(name)}"></i></span></td>
+          <td class="r amt num out">${money(amount)}</td></tr>`).join("")}</tbody></table></div>
 
-    <div class="panel"><h3>${esc(name)} by month</h3>
-      <p>Same accounts and period as the controls above.</p>
-      <div class="chartbox"><canvas id="drillChart"></canvas></div></div>
+      <div class="panel"><h3>${esc(name)} by month</h3>
+        <p>Same accounts and period as the controls above.</p>
+        <div class="chartbox"><canvas id="drillChart"></canvas></div></div>
+    </div>
 
     ${transactionTable(name, rows, {column: "account", hideCategory: true})}`;
 }
@@ -2487,7 +2641,7 @@ function drawDrillChart(name, rows) {
   draw("drillChart", {
     type: "bar",
     data: {labels: months.map(MONTH_LABEL), datasets: [{
-      label: name, borderRadius: 0, backgroundColor: colourFor(name),
+      label: name, ...barStyle(), backgroundColor: colourFor(name),
       data: months.map(m => rows.filter(t => monthOf(spentOn(t)) === m)
         .reduce((n, t) => n - t.amount, 0)),
     }]},
@@ -2497,32 +2651,10 @@ function drawDrillChart(name, rows) {
 }
 
 function drawAnalysisCharts(rows, ranked) {
-  draw("catChart", {
-    type: "bar",
-    data: {labels: ranked.map(([name]) => name), datasets: [{
-      data: ranked.map(([, c]) => c.total),
-      backgroundColor: ranked.map(([name]) => colourFor(name)), borderRadius: 0,
-    }]},
-    options: baseOptions({
-      indexAxis: "y",
-      onClick: (_event, hits) => {
-        if (!hits.length) return;
-        analysis.category = ranked[hits[0].index][0];
-        render();
-      },
-      plugins: {legend: {display: false},
-        tooltip: {callbacks: {label: c => money(c.parsed.x)}}},
-      scales: {
-        x: {border: {display: false}, ticks: {callback: moneyTick}},
-        y: {grid: {display: false}, ticks: {color: css("--ink-dim"), autoSkip: false}},
-      },
-    }),
-  });
-
   const months = monthsSpanning(rows);
   const top = ranked.slice(0, 8).map(([name]) => name);
   const series = [...top, "Everything else"].map(name => ({
-    label: name, stack: "s", borderRadius: 0,
+    label: name, stack: "s", ...barStyle(),
     backgroundColor: name === "Everything else" ? css("--ink-faint") : colourFor(name),
     data: months.map(m => rows
       .filter(t => monthOf(spentOn(t)) === m &&
@@ -2621,14 +2753,13 @@ function freeCash() {
 const shortDay = day => { const [, m, d] = day.split("-"); return `${+d} ${MONTHS[+m - 1]}`; };
 
 function cashControls() {
-  return `<div class="controls"><div>
-      <div class="caption" style="margin-bottom:6px">Ahead</div>
-      <div class="picker">${HORIZONS.map(h => `<button class="chip horizon" type="button"
-          data-horizon="${h.key}" aria-current="${cash.preset === h.key}">${h.label}</button>`).join("")}</div>
-      <div class="picker" style="margin-top:6px">
-        <label><input type="date" class="cash-from" aria-label="From" value="${cash.from || ""}"></label>
-        <label><input type="date" class="cash-to" aria-label="To" value="${cash.to || ""}"></label>
-      </div></div></div>`;
+  return `<div class="controls"><div class="toolbar">
+      <span class="caption">Ahead</span>
+      <div class="seg" role="group" aria-label="How far ahead">${HORIZONS.map(h => `<button class="horizon"
+        type="button" data-horizon="${h.key}" aria-current="${cash.preset === h.key}">${h.label}</button>`).join("")}</div>
+      <label class="field">From <input type="date" class="cash-from" aria-label="From" value="${cash.from || ""}"></label>
+      <label class="field">To <input type="date" class="cash-to" aria-label="To" value="${cash.to || ""}"></label>
+    </div></div>`;
 }
 
 // As wireControls: each handler ends by focusing the new copy of its control.
@@ -2663,19 +2794,18 @@ function renderCashflow() {
   const planned = {in: coming.filter(t => t.amount > 0).reduce((n, t) => n + t.amount, 0),
                    out: coming.filter(t => t.amount < 0).reduce((n, t) => n - t.amount, 0)};
   const end = series[series.length - 1];
-  const card = (label, value, cls, note) =>
-    `<div class="card"><div class="caption">${label}</div>
-       <div class="v num ${cls || ""}">${value}</div>
-       ${note ? `<div class="note">${note}</div>` : ""}</div>`;
+  // Free cash is money you hold, so it wears blue, and only goes red for a
+  // shortfall.
   const body = `
     <div class="cards">
-      ${card("Free cash", low ? money(low.amount) : "—", low ? tone(low.amount) : "",
-             !low ? "the period ends before today"
-             : low.day === today ? "now, and no plan takes it lower" : `lowest on ${dayLabel(low.day)}`)}
-      ${card("In accounts now", money(accountsTotal()), "", "term deposits and investments left out")}
-      ${card("End of period", money(end), tone(end), dayLabel(to))}
-      ${card("Planned in", money(planned.in), "in", `in the projection to ${dayLabel(to)}`)}
-      ${card("Planned out", money(planned.out), "out", `in the projection to ${dayLabel(to)}`)}
+      ${card("Free cash", low ? money(low.amount) : "—", {fill: "blue", hero: true,
+             cls: low && low.amount < 0 ? "loss" : "",
+             note: !low ? "the period ends before today"
+                   : low.day === today ? "now, and no plan takes it lower" : `lowest on ${dayLabel(low.day)}`})}
+      ${card("In accounts now", money(accountsTotal()), {note: "term deposits and investments left out"})}
+      ${card("End of period", money(end), {cls: tone(end), note: dayLabel(to)})}
+      ${card("Planned in", money(planned.in), {fill: "mint", note: `in the projection to ${dayLabel(to)}`})}
+      ${card("Planned out", money(planned.out), {fill: "coral", note: `in the projection to ${dayLabel(to)}`})}
     </div>
     <div class="panel">
       <h3>Free cash, day by day</h3>
@@ -2706,15 +2836,14 @@ function renderCashflow() {
   draw("cashChart", {
     type: "line",
     data: {labels: days.map(shortDay), datasets: [{
-      label: "Free cash", data: series, borderColor: css("--ink"), backgroundColor: "transparent",
-      borderWidth: 2, tension: 0.25, pointHoverRadius: 4, pointBackgroundColor: css("--accent"),
+      label: "Free cash", data: series, ...lineStyle(), pointBackgroundColor: css("--line-chart"),
       // The projection is dashed, and red wherever it touches below zero. One
       // dot marks today, where the bank's figures end.
       segment: {
         borderDash: c => ahead >= 0 && c.p0DataIndex >= ahead ? [4, 4] : undefined,
         borderColor: c => c.p0.parsed.y < 0 || c.p1.parsed.y < 0 ? loss : undefined,
       },
-      pointRadius: c => days[c.dataIndex] === today ? 3 : 0,
+      pointRadius: c => days[c.dataIndex] === today ? 4 : 0,
     }]},
     options: baseOptions({plugins: {legend: {display: false},
       tooltip: {callbacks: {title: items => dayLabel(days[items[0].dataIndex]),
@@ -2726,7 +2855,7 @@ function renderCashflow() {
 // A category says where money came from, which `type` cannot. Salary and money
 // from your parents are both income, and worth telling apart.
 function renderRules() {
-  // Bank rows only, whatever the toggle: a rule labels what happened, and a
+  // Bank rows only, whatever the what-if switch: a rule labels what happened, and a
   // plan has not. Transfers are excluded here as they are everywhere else;
   // summed in, money moved between your own accounts would count as spending.
   const byCategory = {};
@@ -2740,7 +2869,7 @@ function renderRules() {
     // they go in a span the stylesheet can shade.
     const pattern = esc(r.pattern).replace(/\s+$/, space => `<span class="trail">${space}</span>`);
     return `<tr>
-      <td><span class="tag" title="${esc(r.category)}" style="--tag:${colourFor(r.category)}">${esc(r.category)}</span></td>
+      <td><span class="tag" title="${esc(r.category)}" style="${tagStyle(r.category)}">${esc(r.category)}</span></td>
       <td><code>${pattern}</code></td>
       <td class="r num" data-hits="${r.id}">…</td>
       <td class="r amt num ${total < 0 ? "out" : "in"}">${money(total)}</td>
@@ -2755,12 +2884,25 @@ function renderRules() {
   document.getElementById("rules").innerHTML = `
     <div class="title"><h2>Rules</h2>
       <span class="sub">label spending and income by their description</span></div>
-    <div class="hint">A rule matches a regular expression against the description,
-      ignoring case. Rules run in the order added and the last match wins, so write a
-      broad rule first and narrow it with a later one. A few rules also set the type,
-      for wording whose meaning the bank has already settled: money going into a term
-      deposit is a transfer, not spending.</div>
-    <div class="tablewrap" style="margin-bottom:14px"><div class="tcap"><span class="grp">Rules</span>
+    <!-- The form first: there can be a hundred rules to scroll past. -->
+    <div class="charts">
+      <div class="panel">
+        <h3>Add a rule</h3>
+        <p>For example category <code>family</code> matching
+           <code>INTL PAYMENT FROM (FIRST NAME|SECOND NAME)</code>.</p>
+        <form class="holding rule-form" id="ruleForm">
+          <div><label class="caption">Category</label><input name="category" required placeholder="family"></div>
+          <div><label class="caption">Pattern</label><input name="pattern" required placeholder="PAYMENT FROM (NAME|OTHER NAME)"></div>
+          <div><button class="btn" type="submit">Add</button></div>
+        </form>
+      </div>
+      <div class="hint"><h3>How rules work</h3>A rule matches a regular expression against the
+        description, ignoring case. Rules run in the order added and the last match wins, so
+        write a broad rule first and narrow it with a later one. A few rules also set the type,
+        for wording whose meaning the bank has already settled: money going into a term deposit
+        is a transfer, not spending.</div>
+    </div>
+    <div class="tablewrap"><div class="tcap"><span class="grp">Rules</span>
         <span class="meta">unlabelled income ${money(uncategorised)}</span></div><table class="fixed">
       <colgroup><col style="width:8.5rem"><col><col style="width:5.5rem">
         <col style="width:8rem"><col style="width:5.5rem"></colgroup>
@@ -2771,17 +2913,7 @@ function renderRules() {
         <th class="r" title="Transactions this pattern matches. The last matching rule wins, so a later rule may label some of them instead.">Hits</th>
         <th class="r">Category total</th><th></th></tr></thead>
       <tbody>${rows || '<tr><td colspan="5" class="empty">No rules yet</td></tr>'}</tbody>
-    </table></div>
-    <div class="panel">
-      <h3>Add a rule</h3>
-      <p>For example category <code>family</code> matching
-         <code>INTL PAYMENT FROM (FIRST NAME|SECOND NAME)</code>.</p>
-      <form class="holding" id="ruleForm" style="grid-template-columns:1fr 3fr auto">
-        <div><label>Category</label><input name="category" required placeholder="family"></div>
-        <div><label>Pattern</label><input name="pattern" required placeholder="PAYMENT FROM (NAME|OTHER NAME)"></div>
-        <div><button class="btn" type="submit">Add</button></div>
-      </form>
-    </div>`;
+    </table></div>`;
 
   // Hit counts are not in data.json: matching every pattern against every row
   // took most of the export's time, and only this page shows them. Asked for
@@ -2832,7 +2964,7 @@ function renderRules() {
 }
 
 // data.json in, with the rows split by the what-if tag. Every view reads
-// DATA.transactions, which render() sets from the toggle. DATA.real is for the
+// DATA.transactions, which render() sets from the what-if switch. DATA.real is for the
 // figures that must never include a plan: the counts in the sidebar and the
 // page header, and what the statements say about term deposits.
 function takeData(fresh) {
@@ -2991,8 +3123,9 @@ window.addEventListener("popstate", () => {
 });
 
 // ---------- the agent ----------
-// Everything it says lands in the bar at the top. The bar is always there, one
-// line tall, so a question never needs a click first.
+// Everything it says lands in a panel that floats over the right of the page,
+// so the page never moves. The Ask pill in the top bar opens it, and so does
+// ⌘K from anywhere.
 const agent = {session: null, busy: false, queue: [], turn: null, controller: null, stopPending: false};
 
 const agentBox = () => document.getElementById("agent");
@@ -3012,16 +3145,28 @@ function agentFull(on) {
   if (on) agentLog().scrollTop = agentLog().scrollHeight;
 }
 
+// Empty or not, the panel opens when asked: before anything is said it says
+// what the agent can do. The pill says whether there is a conversation to go
+// back to.
 function agentOpen(open) {
-  // Nothing said yet means nothing to show: clicking into an empty box should
-  // not drop an empty panel over the page.
   const said = agentLog().children.length > 0;
-  agentBox().classList.toggle("open", open && said);
+  agentBox().classList.toggle("open", open);
   // Full screen is the open panel made bigger; with the panel shut it cannot stay.
-  if (!(open && said)) agentFull(false);
-  agentInput().placeholder = said && !open ? "Continue chatting…"
-                                           : "Ask about your money…";
+  if (!open) agentFull(false);
+  const ask = document.getElementById("askBtn");
+  ask.setAttribute("aria-expanded", String(open));
+  ask.querySelector(".ask-label").textContent = said ? "Continue chatting" : "Ask about your money";
+  agentInput().placeholder = said ? "Ask a follow-up…" : "Ask about your money…";
   if (open && said) agentLog().scrollTop = agentLog().scrollHeight;
+}
+
+// Opens the panel with the caret at the end of the box rather than selecting,
+// so a half-typed question survives.
+function agentFocus() {
+  agentOpen(true);
+  const box = agentInput();
+  box.focus();
+  box.setSelectionRange(box.value.length, box.value.length);
 }
 
 // The box grows with what you type rather than scrolling a single line away.
@@ -3059,9 +3204,9 @@ const STEP_LABELS = {schema: "reading the schema", run_query: "querying",
                      read_rows: "reading transactions", set_view: "changing the view",
                      propose_change: "drafting a change"};
 
-// Markdown for an answer, drawn the way a terminal would: tables, lists,
-// headings, quotes, rules, code blocks, bold, italic, inline code and links, at
-// one text size. Every piece of text is escaped before any of these patterns
+// Markdown for an answer: tables, lists, headings, quotes, rules, code
+// blocks, bold, italic, inline code and links. Every piece of text is escaped
+// before any of these patterns
 // turn parts of it back into tags, so nothing the model writes becomes live
 // HTML on the page.
 function mdInline(text) {
@@ -3255,6 +3400,8 @@ function applyView(params) {
 // agent hands back, with an answer or with a question for you, it stops.
 function agentThinking(on) {
   agentLog().setAttribute("aria-busy", on ? "true" : "false");
+  // The pill shows it too, so a closed panel still says an answer is coming.
+  document.getElementById("askBtn").classList.toggle("busy", on);
   document.getElementById("agentSpin").hidden = !on;
   document.getElementById("agentStop").hidden = !on;
   agentGrow();
@@ -3309,7 +3456,7 @@ async function agentAsk(question, turn = null) {
       : {type: "done", error: true, message: error.message});
   } finally {
     // finally, not after the try: a dropped connection must still stop the
-    // spinner, or it turns forever on a turn that is never coming back.
+    // busy dots, or they run forever on a turn that is never coming back.
     agent.busy = false;
     agent.controller = null;
     agent.turn = null;
@@ -3360,9 +3507,9 @@ function restoreChat() {
     if (!saved) return;
     agent.session = saved.session || null;
     agentLog().innerHTML = saved.html || "";
-    agentOpen(false);                     // collapsed, reading "Continue chatting…"
+    agentOpen(false);                     // closed, the pill reading "Continue chatting"
   } catch {
-    // Unreadable: start clean rather than break the bar. Storage can be blocked
+    // Unreadable: start clean rather than break the chat. Storage can be blocked
     // outright, and then clearing it throws too.
     try { localStorage.removeItem(CHAT_KEY); } catch {}
   }
@@ -3375,7 +3522,6 @@ function wireAgent() {
   // Catches a refresh in the middle of an answer, not just between turns.
   window.addEventListener("beforeunload", saveChat);
   box.addEventListener("input", agentGrow);
-  box.addEventListener("focus", () => agentOpen(true));
   box.addEventListener("keydown", event => {
     // Enter sends. Shift+Enter is a new line, and the box grows to fit it. An
     // Enter that confirms a word in an input method, as for Chinese, does not send.
@@ -3392,14 +3538,16 @@ function wireAgent() {
     agentAsk(question);
   };
   // Cmd+K from anywhere, including from inside another input. The browser binds
-  // Cmd+K to its own address bar, so that has to be suppressed. The caret goes
-  // to the end rather than selecting, so a half-typed question survives.
+  // Cmd+K to its own address bar, so that has to be suppressed.
   document.addEventListener("keydown", event => {
     if ((event.key || "").toLowerCase() !== "k" || !(event.metaKey || event.ctrlKey)) return;
     event.preventDefault();
-    box.focus();
-    box.setSelectionRange(box.value.length, box.value.length);
+    agentFocus();
   });
+  // The pill opens and shuts the panel. ✕ shuts it and hands the focus back.
+  const ask = document.getElementById("askBtn");
+  ask.onclick = () => agentBox().classList.contains("open") ? agentOpen(false) : agentFocus();
+  document.getElementById("agentClose").onclick = () => { agentOpen(false); ask.focus(); };
   document.getElementById("agentStop").onclick = agentStop;
   document.getElementById("agentFull").onclick = () =>
     agentFull(!agentBox().classList.contains("full"));
@@ -3414,9 +3562,10 @@ function wireAgent() {
       : scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 1);
     if (!room) event.preventDefault();
   }, {passive: false});
-  // Clicking the page puts the answers away; the input stays where it is.
+  // Clicking the page puts the panel away, and the conversation keeps. The pill
+  // is left out: its own click opens and shuts the panel.
   document.addEventListener("mousedown", event => {
-    if (!agentBox().contains(event.target)) agentOpen(false);
+    if (!agentBox().contains(event.target) && !ask.contains(event.target)) agentOpen(false);
   });
   agentLog().addEventListener("click", async event => {
     const panel = event.target.closest(".propose");
@@ -3449,7 +3598,7 @@ function wireAgent() {
 }
 
 function render() {
-  // The toggle: every view reads DATA.transactions, so hiding the plans is
+  // The what-if switch: every view reads DATA.transactions, so hiding the plans is
   // one line here rather than a filter in each of them.
   DATA.transactions = state.whatif ? DATA.all : DATA.real;
   writeUrl();

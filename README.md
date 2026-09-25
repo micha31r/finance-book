@@ -51,15 +51,15 @@ The views are All accounts, one ledger per account, Spending analysis, Cashflow
 Rules. The URL holds the view, so a link or a
 bookmark opens the same place.
 
-The bar at the top of the page asks an AI agent about your money. It needs the
-`claude` CLI installed and signed in, so run `claude` once in a terminal
-first. It reads the database without account numbers, and changes nothing
-until you click Apply.
+The Ask button at the top right, or ⌘K, opens a chat panel where you can ask
+an AI agent about your money. It needs the `claude` CLI installed and signed
+in, so run `claude` once in a terminal first. It reads the database without account
+numbers, and changes nothing until you click Apply.
 
 You can double-click a cell in any transaction table to edit its description,
-type or category. Each ledger table ends with a "+ add" row for money the bank
+type or category. Each ledger table has a "+ Add" button for money the bank
 has not listed yet. That is a real payment, or a what-if: a plan you want to
-see the effect of. What-ifs are tagged, and a toggle in the sidebar footer
+see the effect of. What-ifs are tagged, and a switch in the sidebar footer
 hides them. Rows you add can be edited and deleted.
 
 The bank's rows keep their dates and amounts. A real row you add is replaced

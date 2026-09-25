@@ -110,7 +110,7 @@ one, so a leftover on its own reads as no series.
 
 ### Rows entered by hand
 
-The page adds rows to a ledger table with "+ add". A what-if (`whatif = 1`) is
+The page adds rows to a ledger table with "+ Add". A what-if (`whatif = 1`) is
 a plan. A real row (`whatif = 0`) is money the bank has not shown yet. Both go
 in the account's `manual` document, with `sequence` 1000000 so they list after
 the bank's rows on a shared day. A repeating one is a series: every row of it
