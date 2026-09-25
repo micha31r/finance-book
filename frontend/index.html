@@ -13,9 +13,9 @@
 <!-- No icon. Saying so stops the browser asking for one and logging a 404. -->
 <link rel="icon" href="data:,">
 <style>
-  /* Calm and soft: a warm off-white ground, white surfaces, pastel cards, a
-     soft serif for titles and big figures, rounded corners everywhere. Light
-     by default, dark when the system is set to dark.
+  /* Calm and soft: a very light beige ground, white surfaces, pastel cards,
+     a soft serif for titles, the sans for every number, and rounded corners
+     everywhere. Light by default, dark when the system is set to dark.
 
      Colour means something. Blue is what you hold, mint is money in, coral is
      money out, yellow is a what-if or a tip, and pink is the chat. Each
@@ -25,15 +25,15 @@
      be told apart, and the sidebar's icon tiles only tell the views apart. */
   :root {
     color-scheme: light;
-    --bg: #f1f2ee;          /* ground */
+    --bg: #f7f4ef;          /* ground: a very light beige */
     --panel: #ffffff;       /* surface: tables, charts, forms */
-    --soft: #e8eae2;        /* chips, inputs, hover on the ground */
-    --line: #e3e4dd;        /* hairlines: column heads, chart gridlines */
-    --rule: #efefea;        /* table row rule */
-    --hover: #f6f6f2;       /* row hover on a surface */
-    --ink: #141510;
-    --ink-dim: #45463f;     /* secondary text, and any text on --soft */
-    --ink-faint: #676960;   /* captions and notes; 4.5:1 even on --soft */
+    --soft: #ede9e1;        /* chips, inputs, hover on the ground: a deeper beige */
+    --line: #e3dfd8;        /* hairlines: column heads, chart gridlines */
+    --rule: #f2f0ec;        /* table row rule */
+    --hover: #f9f7f4;       /* row hover on a surface */
+    --ink: #191511;
+    --ink-dim: #4f4943;     /* secondary text, and any text on --soft */
+    --ink-faint: #6c6660;   /* captions and notes; 4.5:1 even on --soft */
     --in: #1e7546;          /* money in */
     --out: var(--ink);      /* money out, outside the transaction tables */
     --move: var(--ink-faint);   /* transfers stay grey */
@@ -41,60 +41,62 @@
     --plan: #915c08;        /* a what-if: a plan you typed in, not a bank row */
     --accent: var(--ink);   /* primary buttons; their text is --bg */
     --focus: #3a75af;
-    --neutral: #a9aaa0;     /* what has no category: Out bars, Uncategorised; the switch when off */
+    --neutral: #b4ada4;     /* what has no category: Out bars, Uncategorised; the switch when off */
+    --sand: #907c67;        /* the edge of a field while you type in it: a deeper beige, 3:1 */
     --line-chart: #386ca0;  /* the balance and cashflow lines */
-    --in-bar: #5bbb8c;      /* income with no category, in the charts */
+    --in-bar: #94b15e;      /* income with no category, in the charts; the --mint green */
     /* The pastels. -ink is the text on each, and -soft a paler fill for the
        pills in the tables and the tip cards. */
     --blue: #b5d5f4;   --blue-ink: #0f253b;
-    --mint: #b0e6c8;   --mint-ink: #0b2e1e;   --mint-soft: #d2f5e1;
+    --mint: #94b15e;   --mint-ink: #1e280b;   --mint-soft: #e4f1d1;
     --coral: #f9b59f;  --coral-ink: #3c180f;  --coral-soft: #ffded3;
     --yellow: #f5df8d; --yellow-ink: #2f2107; --yellow-soft: #fdf1c3;
     --pink: #f6cedf;   --pink-ink: #361927;
     /* The four pastels in a row. It marks the surface where you talk to a
        model rather than read your own books. */
     --spectrum: linear-gradient(90deg, var(--yellow), var(--blue), var(--pink), var(--coral));
-    --shadow: 0 1px 2px rgb(20 21 16 / .06), 0 2px 8px rgb(20 21 16 / .04);
-    --shadow-pop: 0 4px 12px rgb(20 21 16 / .08), 0 24px 64px rgb(20 21 16 / .16);
+    --shadow: 0 1px 2px rgb(45 32 18 / .06), 0 2px 8px rgb(45 32 18 / .04);
+    --shadow-pop: 0 4px 12px rgb(45 32 18 / .08), 0 24px 64px rgb(45 32 18 / .16);
     --display: "Fraunces", ui-serif, Georgia, serif;
     --sans: "Geist", ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
     --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
     --gap: 16px;            /* one spacing step, horizontal and vertical */
-    --bar: 60px;            /* the top bar; the page sits below it */
+    --bar: 0px;             /* the top bar, which only narrow screens have; the page sits below it */
     --side: 248px;          /* the sidebar */
     --radius: 20px;         /* cards, panels, tables */
     --drill-head: 76px;     /* the drill-down's band, which its table heads stick under */
-    scrollbar-color: #cfd0c8 transparent;   /* a quiet thumb on a clear track */
+    scrollbar-color: #d2cdc5 transparent;   /* a quiet thumb on a clear track */
   }
   /* The same roles on a warm near-black. The pastels turn into deep tints
      with a light ink, and every text colour still holds 4.5:1. */
   @media (prefers-color-scheme: dark) {
     :root {
       color-scheme: dark;
-      --bg: #131410;
-      --panel: #1d1e18;
-      --soft: #2a2b24;
-      --line: #34352d;
-      --rule: #26271f;
-      --hover: #23241d;
-      --ink: #f1f2ee;
-      --ink-dim: #c9cabf;
-      --ink-faint: #9d9e92;
+      --bg: #13100d;
+      --panel: #1c1915;
+      --soft: #2c2822;
+      --line: #37322c;
+      --rule: #23201c;
+      --hover: #211e19;
+      --ink: #f5f1ec;
+      --ink-dim: #cfcac1;
+      --ink-faint: #a49e94;
       --in: #73ce95;
       --loss: #f07f77;
       --plan: #e5bf6d;
       --focus: #8bbcef;
-      --neutral: #55564e;
+      --neutral: #59544e;
+      --sand: #8a775d;
       --line-chart: #8bbcef;
-      --in-bar: #5cab83;
+      --in-bar: #8aa35d;
       --blue: #23374c;   --blue-ink: #d1e7ff;
-      --mint: #1c3d2c;   --mint-ink: #c9efd9;   --mint-soft: #1b3427;
+      --mint: #2f3a1c;   --mint-ink: #ddebc7;   --mint-soft: #29311b;
       --coral: #522c20;  --coral-ink: #ffdacd;  --coral-soft: #44281f;
       --yellow: #45391a; --yellow-ink: #f6e8b3; --yellow-soft: #3c3216;
       --pink: #492a39;   --pink-ink: #fbdae8;
       --shadow: 0 1px 2px rgb(0 0 0 / .4), 0 2px 8px rgb(0 0 0 / .2);
       --shadow-pop: 0 4px 12px rgb(0 0 0 / .4), 0 24px 64px rgb(0 0 0 / .5);
-      scrollbar-color: #45463f transparent;
+      scrollbar-color: #4a443b transparent;
     }
   }
   * { box-sizing: border-box; }
@@ -139,6 +141,8 @@
   .caption { font: 600 11px/1.4 var(--sans); color: var(--ink-faint);
              text-transform: uppercase; letter-spacing: .14em; }
   .ink-faint { color: var(--ink-faint); }
+  /* Digits inside a serif title: numbers are always in the sans. */
+  .digits { font-family: var(--sans); }
 
   /* The pastel fills. A card, panel, nav icon or report takes one of these
      and paints itself in --tone, writing in --tone-ink. */
@@ -149,14 +153,16 @@
   .tone-pink   { --tone: var(--pink);   --tone-ink: var(--pink-ink); }
 
   /* ---------- top bar ---------- */
-  /* Fixed on every view and every width. Solid: rows showing through it
-     were noise above a stuck table head. */
+  /* Narrow screens only, holding the ☰ and the name. Wide screens put the
+     name at the top of the sidebar and keep the page's full height. Solid:
+     rows showing through it were noise above a stuck table head. */
   .topbar {
     position: fixed; inset: 0 0 auto 0; z-index: 55; height: var(--bar);
-    display: flex; align-items: center; gap: 8px; padding: 0 14px 0 28px;
+    display: none; align-items: center; gap: 8px; padding: 0 14px 0 8px;
     background: var(--bg);
   }
   .brand { font: 600 21px/1 var(--display); letter-spacing: -0.01em; white-space: nowrap; }
+  nav .brand { padding: 14px 12px 24px; }
   .icon-btn {
     display: inline-grid; place-items: center; flex: none; width: 34px; height: 34px;
     padding: 0; border: 0; border-radius: 999px; cursor: pointer;
@@ -164,24 +170,22 @@
   }
   .icon-btn:hover { background: var(--soft); color: var(--ink); }
   .menu-btn { display: none; }        /* phones only, below */
-  /* The way into the chat: a white pill edged with the pastel spectrum. */
+  /* The way into the chat: a small white pill edged with the pastel
+     spectrum, floating in the bottom corner, so it takes no room from the
+     page. Above the drill-down, so the chat works there too, and under the
+     drawer's scrim. The open panel covers it. */
   .ask {
-    margin-left: auto; display: inline-flex; align-items: center; gap: 10px;
-    height: 40px; min-width: 272px; padding: 0 7px 0 14px; cursor: pointer;
-    border: 1.5px solid transparent; border-radius: 999px;
+    position: fixed; right: 20px; bottom: 20px; z-index: 56;
+    display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 16px 0 13px;
+    border: 1.5px solid transparent; border-radius: 999px; cursor: pointer;
     background: linear-gradient(var(--panel), var(--panel)) padding-box, var(--spectrum) border-box;
-    color: var(--ink-dim); font: 500 13.5px var(--sans); box-shadow: var(--shadow);
+    color: var(--ink); font: 500 13.5px var(--sans); box-shadow: var(--shadow-pop);
   }
-  .ask:hover, .ask[aria-expanded="true"] { color: var(--ink); }
   .ask .spark { flex: none; color: var(--pink-ink); }
-  .ask-label { flex: 1; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  kbd { font: 500 11px/1 var(--sans); padding: 5px 7px; border-radius: 8px;
-        background: var(--soft); color: var(--ink-dim); }
-  /* While the agent works the dots stand in for the shortcut, so a closed
-     panel still says an answer is coming. */
-  .ask .dots { display: none; margin-right: 8px; }
+  /* While the agent works the dots show after the word, so a closed panel
+     still says an answer is coming. */
+  .ask .dots { display: none; }
   .ask.busy .dots { display: inline-flex; }
-  .ask.busy kbd { display: none; }
   /* Three dots rising in turn: the agent is working. */
   .dots { display: inline-flex; align-items: center; gap: 3px; color: var(--ink-faint); }
   .dots i { width: 5px; height: 5px; border-radius: 50%; background: currentColor;
@@ -241,7 +245,7 @@
   [aria-checked="true"] > .switch::after { transform: translateX(12px); }
 
   /* ---------- main ---------- */
-  main { width: 100%; max-width: 1320px; min-width: 0; justify-self: center; padding: 14px 32px 64px; }
+  main { width: 100%; max-width: 1320px; min-width: 0; justify-self: center; padding: 28px 32px 88px; }
   /* The title, the line under it, and any action on the right. A grid, so
      every view's header lines up whatever it holds. */
   .title { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px;
@@ -270,11 +274,12 @@
   }
   .card.hero { flex: 2 1 360px; padding: 20px 24px; }
   .card .caption, .card .note { color: var(--tone-ink, var(--ink-faint)); }
-  /* The figure is the loudest thing on the page. It scales with the card, so
-     "+$123,456.78" still fits a narrow one. */
-  .card .v { margin-top: 8px; font: 550 clamp(19px, 12cqi, 30px)/1.15 var(--display);
-             letter-spacing: -0.01em; font-variant-numeric: lining-nums tabular-nums; }
-  .card.hero .v { font-size: clamp(26px, 10cqi, 44px); }
+  /* The figure is the loudest thing on the page, in the sans like every
+     number. It scales with the card, so "+$123,456.78" still fits a narrow
+     one. */
+  .card .v { margin-top: 8px; font: 600 clamp(19px, 11cqi, 28px)/1.15 var(--sans);
+             letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .card.hero .v { font-size: clamp(26px, 9cqi, 40px); }
   /* A name rather than a figure, as in "Most spent at". */
   .card .v.text { font: 600 15px/1.35 var(--sans); overflow-wrap: anywhere; }
   .card .note { margin-top: 6px; font-size: 12.5px; }
@@ -330,7 +335,7 @@
   .field input { height: 100%; padding: 0 4px; border: 0; background: none; color: var(--ink);
                  font: 500 13px var(--sans); }
   .field input:focus { outline: none; }
-  .field:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .field:focus-within { box-shadow: inset 0 0 0 1.5px var(--sand), var(--shadow); }
   /* minmax(0, …): a grid column otherwise grows to the period pill's full
      width on a phone, and the account pills run off the screen. */
   .controls { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-bottom: 20px; }
@@ -373,7 +378,8 @@
   }
   /* Collapsed, the strip is the whole card. */
   .tcap:has(.fold[aria-expanded="false"]) { border-radius: var(--radius); }
-  .tcap .grp { font: 600 16px/1.3 var(--display); letter-spacing: -0.005em; }
+  /* In the sans: most carry a period, "2026" or "26 Aug 2026 to 25 Dec 2026". */
+  .tcap .grp { font: 600 14.5px/1.3 var(--sans); }
   /* Sits right after the account name. Quiet until you hover it, because every
      table has one and nine of them shouting would be noise. */
   .findbtn {
@@ -397,7 +403,7 @@
     font: inherit; font-size: 13px; color: var(--ink); background: var(--soft);
     border: 1px solid transparent; border-radius: 999px;
   }
-  .tcap .find:focus { outline: none; border-color: var(--ink-faint); background: var(--panel); }
+  .tcap .find:focus { outline: none; border-color: var(--sand); }
   /* Chrome's clear button is its own white or blue. This is the same cross in
      a token. */
   .tcap .find::-webkit-search-cancel-button {
@@ -518,7 +524,7 @@
     background: var(--soft); border: 1px solid transparent; border-radius: 10px;
   }
   .editor:focus, tr.add input:not([type=checkbox]):focus, tr.add select:focus {
-    outline: none; border-color: var(--ink-faint); background: var(--panel);
+    outline: none; border-color: var(--sand);
   }
   td.desc .editor, td.desc input { width: 100%; }
   td.amt .editor, tr.add [name="amount"] { width: 6rem; text-align: right; }
@@ -596,7 +602,7 @@
     width: 100%; height: 40px; padding: 0 14px; font: inherit; color: var(--ink);
     background: var(--soft); border: 1px solid transparent; border-radius: 12px;
   }
-  form.holding input:focus { outline: none; border-color: var(--ink-faint); background: var(--panel); }
+  form.holding input:focus { outline: none; border-color: var(--sand); }
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px;
     height: 40px; padding: 0 18px; border: 0; border-radius: 999px; cursor: pointer;
@@ -630,7 +636,7 @@
      can take the caret straight away, and waits for the fade on the way out.
      It stacks above the drill-down and the top bar, so it works over both. */
   #agent {
-    position: fixed; z-index: 60; top: calc(var(--bar) + 2px); right: 14px; bottom: 14px;
+    position: fixed; z-index: 60; top: calc(var(--bar) + 14px); right: 14px; bottom: 14px;
     width: min(440px, calc(100vw - 28px));
     display: flex; flex-direction: column; overflow: hidden;
     background: var(--panel); border-radius: 24px; box-shadow: var(--shadow-pop);
@@ -666,7 +672,7 @@
      stay level with the last line as the box grows. */
   #agentForm { flex: none; display: flex; align-items: flex-end; gap: 8px; margin: 0 12px 12px;
                padding: 4px 4px 4px 16px; border-radius: 22px; background: var(--soft); }
-  #agentForm:focus-within { box-shadow: inset 0 0 0 1.5px var(--ink-faint); }
+  #agentForm:focus-within { box-shadow: inset 0 0 0 1.5px var(--sand); }
   #agentInput {
     flex: 1; min-width: 0; resize: none; overflow-y: auto;
     max-height: 40vh; padding: 8px 0; border: 0; background: none; overscroll-behavior: contain;
@@ -697,16 +703,16 @@
   .tag-queued { font-size: 11.5px; margin-left: 8px; }
   .turn .steps:not(:empty) { margin-top: 10px; display: grid; gap: 3px; }
   .turn .said:not(:empty) { margin-top: 10px; line-height: 1.6; }
-  /* Markdown drawn quietly: headings a step up in the soft serif, structure
-     carried by weight and indentation, and every block separated by the same
-     10px. */
+  /* Markdown drawn quietly: headings in bold, structure carried by weight
+     and indentation, and every block separated by the same 10px. The agent's
+     headings often hold figures, so they stay in the sans. */
   .said > * { margin: 0; }
   .said > * + * { margin-top: 10px; }
   .said strong { font-weight: 600; }
   .said em { font-style: italic; }
   .said a { color: inherit; }
   .said code { font-size: 12.5px; }
-  .said .md-h { font: 600 15px/1.35 var(--display); }
+  .said .md-h { font: 600 14.5px/1.35 var(--sans); }
   .said .md-list { display: grid; gap: 3px; }
   .said .md-li { display: flex; gap: 8px; padding-left: calc(var(--level, 0) * 18px); }
   .said .md-mark { flex: none; min-width: 1.4ch; color: var(--ink-faint); }
@@ -737,7 +743,7 @@
   /* A change the agent wants to make, waiting for your Apply. */
   .propose { margin-top: 12px; padding: 14px 16px; border-radius: 18px;
              background: var(--yellow-soft); color: var(--yellow-ink); }
-  .propose h4 { margin: 0 0 4px; font: 600 15px/1.3 var(--display); }
+  .propose h4 { margin: 0 0 4px; font: 600 14px/1.3 var(--sans); }
   .propose p { margin: 0 0 10px; font-size: 13px; }
   .propose .work { margin-bottom: 10px; }
   .propose .work > summary { color: inherit; }
@@ -755,7 +761,9 @@
      tables get the full width: beside a sidebar they spilled out of their
      cards. The script's DRAWER query holds the same width. */
   @media (max-width: 1000px) {
-    .topbar { padding-left: 8px; }
+    :root { --bar: 56px; }
+    .topbar { display: flex; }
+    nav .brand { display: none; }       /* the top bar has it */
     .menu-btn { display: inline-grid; }
     .layout { grid-template-columns: minmax(0, 1fr); }
     nav {
@@ -771,11 +779,11 @@
     /* Under the drill-down the layout is inert, drawer included, so the ☰
        that opens it hides. */
     body.locked .menu-btn { visibility: hidden; }
-    main { padding: 10px 24px 56px; }
+    main { padding: 10px 24px 80px; }
   }
   /* Phones: a view opens on its own content, and the chat takes the screen. */
   @media (max-width: 600px) {
-    main { padding: 6px 16px 48px; }
+    main { padding: 6px 16px 80px; }
     .title h2 { font-size: 28px; }
     .drill-head { padding: 0 16px; }
     .drill-head h2 { font-size: 21px; }
@@ -784,11 +792,9 @@
     /* It already fills the screen, so full screen would change nothing. */
     #agentFull { display: none; }
   }
-  /* The pill keeps the words and drops the shortcut, which a phone has no
-     keys for. A rule's pattern gets a line of its own. */
+  /* A rule's pattern gets a line of its own. */
   @media (max-width: 520px) {
-    .ask { min-width: 0; flex: 0 1 auto; }
-    .ask kbd { display: none; }
+    .ask { right: 16px; bottom: 16px; }
     .brand { font-size: 18px; }
     .card.hero .v { font-size: 28px; }
     form.holding.rule-form { grid-template-columns: 1fr; }
@@ -807,17 +813,16 @@
          stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11"/></svg>
   </button>
   <div class="brand">Finance Book</div>
-  <!-- Opens the chat panel. ⌘K does the same from anywhere. -->
-  <button class="ask" id="askBtn" type="button" aria-expanded="false" aria-controls="agent"
-          title="Ask about your money (⌘K)">
-    <svg class="spark" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor">
-      <path d="M7 1.5c.4 3 1.6 4.2 4.6 4.6-3 .4-4.2 1.6-4.6 4.6-.4-3-1.6-4.2-4.6-4.6 3-.4 4.2-1.6 4.6-4.6z"/>
-      <path d="M12.4 9.6c.2 1.5.8 2.1 2.3 2.3-1.5.2-2.1.8-2.3 2.3-.2-1.5-.8-2.1-2.3-2.3 1.5-.2 2.1-.8 2.3-2.3z"/></svg>
-    <span class="ask-label">Ask about your money</span>
-    <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
-    <kbd>⌘K</kbd>
-  </button>
 </header>
+<!-- Opens the chat panel. ⌘K does the same from anywhere. -->
+<button class="ask" id="askBtn" type="button" aria-expanded="false" aria-controls="agent"
+        title="Ask about your money (⌘K)">
+  <svg class="spark" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor">
+    <path d="M7 1.5c.4 3 1.6 4.2 4.6 4.6-3 .4-4.2 1.6-4.6 4.6-.4-3-1.6-4.2-4.6-4.6 3-.4 4.2-1.6 4.6-4.6z"/>
+    <path d="M12.4 9.6c.2 1.5.8 2.1 2.3 2.3-1.5.2-2.1.8-2.3 2.3-.2-1.5-.8-2.1-2.3-2.3 1.5-.2 2.1-.8 2.3-2.3z"/></svg>
+  <span class="ask-label">Ask</span>
+  <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+</button>
 <aside id="agent" aria-label="Ask about your money">
   <div class="agent-head">
     <h2>Ask about your money</h2>
@@ -1127,8 +1132,8 @@ function renderSidebar() {
   // All accounts totals the bank accounts listed below it. Term deposits and
   // investments have their own items under Holdings, so they are not counted
   // there too.
-  nav.innerHTML =
-    group("", item("all", "All accounts", compact(accountsTotal()), icon("all", "blue"))
+  nav.innerHTML = `<div class="brand">Finance Book</div>`
+    + group("", item("all", "All accounts", compact(accountsTotal()), icon("all", "blue"))
       + item("analysis", "Spending analysis", "", icon("analysis", "coral"))
       + item("cashflow", "Cashflow", low ? compact(low.amount) : "—", icon("cashflow", "mint"),
              "Free cash: the lowest the projection goes in the period"))
@@ -1179,8 +1184,8 @@ function renderSummary() {
   const period = periodLabel();
   const balance = view.reduce((n, a) => n + (a.balance || 0), 0);
 
-  document.getElementById("viewName").textContent =
-    state.account === "all" ? "All accounts" : view[0].label;
+  document.getElementById("viewName").innerHTML =
+    serifText(state.account === "all" ? "All accounts" : view[0].label);
   document.getElementById("viewSub").textContent =
     state.account === "all"
       ? `${view.length} accounts · ${DATA.real.length.toLocaleString()} transactions`
@@ -1864,7 +1869,7 @@ function renderHoldings(kind) {
     form.institution.value = h.institution || "";
     form.balance.value = (h.balance / 100).toFixed(2);
     form.as_at.value = h.as_at || "";
-    root.querySelector(".form-title").textContent = "Edit " + h.name;
+    root.querySelector(".form-title").innerHTML = "Edit " + serifText(h.name);
     form.scrollIntoView({behavior: "smooth", block: "center"});
   });
   root.querySelectorAll("[data-del]").forEach((b, i) => b.onclick = async () => {
@@ -2144,7 +2149,7 @@ function renderDrill(rows, spent, days) {
 
   panel.querySelector(".drill-head").style.cssText = tagStyle(name);
   document.getElementById("drillName").innerHTML =
-    `<span class="swatch" style="background:${colourFor(name)};width:12px;height:12px"></span>${esc(name)}`;
+    `<span class="swatch" style="background:${colourFor(name)};width:12px;height:12px"></span>${serifText(name)}`;
   // A ticked-off category is not in the total, so it has no share of it. The
   // table shows a dash for it too.
   document.getElementById("drillSub").textContent = analysis.hidden.has(name)
@@ -2612,7 +2617,7 @@ function drillBody(name, rows, days) {
             (100 * amount / top[0][1]).toFixed(1)}%;background:${colourFor(name)}"></i></span></td>
           <td class="r amt num out">${money(amount)}</td></tr>`).join("")}</tbody></table></div>
 
-      <div class="panel"><h3>${esc(name)} by month</h3>
+      <div class="panel"><h3>${serifText(name)} by month</h3>
         <p>Same accounts and period as the controls above.</p>
         <div class="chartbox"><canvas id="drillChart"></canvas></div></div>
     </div>
@@ -3007,6 +3012,12 @@ async function request(url, options) {
 const esc = t => String(t).replace(/[<>&"']/g, c =>
   ({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;","'":"&#39;"}[c]));
 
+// Numbers are never set in the serif. A serif title that shows your data, an
+// account, category or holding name, wraps its digits so they take the sans.
+// Split before escaping, so the digits of an entity like &#39; are left alone.
+const serifText = text => String(text).split(/(\d+(?:[.,:\/-]\d+)*)/)
+  .map((part, i) => i % 2 ? `<span class="digits">${esc(part)}</span>` : esc(part)).join("");
+
 // Where you are and what you have filtered lives in the URL, so a refresh, a
 // bookmark or a link opens the same screen instead of All accounts.
 const TABS = ["holdings", "investments", "rules", "analysis", "cashflow"];
@@ -3124,8 +3135,8 @@ window.addEventListener("popstate", () => {
 
 // ---------- the agent ----------
 // Everything it says lands in a panel that floats over the right of the page,
-// so the page never moves. The Ask pill in the top bar opens it, and so does
-// ⌘K from anywhere.
+// so the page never moves. The Ask pill floating in the corner opens it, and
+// so does ⌘K from anywhere.
 const agent = {session: null, busy: false, queue: [], turn: null, controller: null, stopPending: false};
 
 const agentBox = () => document.getElementById("agent");
@@ -3155,7 +3166,7 @@ function agentOpen(open) {
   if (!open) agentFull(false);
   const ask = document.getElementById("askBtn");
   ask.setAttribute("aria-expanded", String(open));
-  ask.querySelector(".ask-label").textContent = said ? "Continue chatting" : "Ask about your money";
+  ask.querySelector(".ask-label").textContent = said ? "Continue" : "Ask";
   agentInput().placeholder = said ? "Ask a follow-up…" : "Ask about your money…";
   if (open && said) agentLog().scrollTop = agentLog().scrollHeight;
 }
@@ -3507,7 +3518,7 @@ function restoreChat() {
     if (!saved) return;
     agent.session = saved.session || null;
     agentLog().innerHTML = saved.html || "";
-    agentOpen(false);                     // closed, the pill reading "Continue chatting"
+    agentOpen(false);                     // closed, the pill reading "Continue"
   } catch {
     // Unreadable: start clean rather than break the chat. Storage can be blocked
     // outright, and then clearing it throws too.

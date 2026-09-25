@@ -51,10 +51,10 @@ The views are All accounts, one ledger per account, Spending analysis, Cashflow
 Rules. The URL holds the view, so a link or a
 bookmark opens the same place.
 
-The Ask button at the top right, or ⌘K, opens a chat panel where you can ask
-an AI agent about your money. It needs the `claude` CLI installed and signed
-in, so run `claude` once in a terminal first. It reads the database without account
-numbers, and changes nothing until you click Apply.
+The Ask button in the bottom corner, or ⌘K, opens a chat panel where you can
+ask an AI agent about your money. It needs the `claude` CLI installed and
+signed in, so run `claude` once in a terminal first. It reads the database
+without account numbers, and changes nothing until you click Apply.
 
 You can double-click a cell in any transaction table to edit its description,
 type or category. Each ledger table has a "+ Add" button for money the bank
