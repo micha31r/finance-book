@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Set the type of transactions the bank's wording cannot explain.
+
+Some movements depend on what only you know. "PAYMENT TO <your name>" into an
+account you have no statements for counts as spending, but if that account is
+yours the money was a transfer. Nothing in the text says which. What you decide
+here is stored and reapplied after every ingest.
+
+    python classify.py list                        what is still unexplained
+    python classify.py set transfer --like "PAYMENT TO <your name>%"
+    python classify.py set transfer --id 4131 4132
+    python classify.py clear --like "..."          undo
+"""
+import argparse
+import sys
+from datetime import datetime, timezone
+
+import db
+import reconcile
+from parsers.shared.money import money_str
+
+BIG = 100_000        # cents. Below this, a stray row barely moves a total.
+# Every listing shows the same columns. A WHERE clause follows.
+ROWS = ("SELECT t.id, t.date, t.amount, t.type, t.description, a.number, b.name bank"
+        " FROM txn t JOIN account a ON a.id=t.account_id JOIN bank b ON b.id=a.bank_id WHERE ")
+
+
+def rows_matching(conn, pattern, ids):
+    if ids:
+        marks = ",".join("?" * len(ids))
+        return conn.execute(f"{ROWS}t.id IN ({marks}) ORDER BY t.date", ids).fetchall()
+    return conn.execute(f"{ROWS}t.description LIKE ? ORDER BY t.date", (pattern,)).fetchall()
+
+
+def show(rows):
+    for r in rows:
+        print(f"  {r['id']:>6} {r['bank']:8s} {r['number']:10s} {r['date']} "
+              f"{money_str(r['amount']):>13}  {r['type']:8s} {r['description'][:52]}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("list").add_argument("--min", type=int, default=BIG,
+                                        help="cents, default 100000 ($1000)")
+    for name in ("set", "clear"):
+        p = sub.add_parser(name)
+        if name == "set":
+            p.add_argument("type", choices=db.TYPES)
+            p.add_argument("--note")
+        p.add_argument("--like", help="SQL LIKE pattern against the description")
+        p.add_argument("--id", nargs="+", type=int)
+
+    args = parser.parse_args()
+    conn = db.connect()
+
+    if args.command == "list":
+        rows = conn.execute(
+            f"{ROWS}t.type IN ('income','expense') AND ABS(t.amount) >= ?"
+            "   AND t.id NOT IN (SELECT txn_id FROM manual_type)"
+            "   AND t.whatif = 0"                    # a plan is not a movement to explain
+            " ORDER BY ABS(t.amount) DESC", (args.min,)).fetchall()
+        print(f"{len(rows)} unexplained movements over {money_str(args.min)}:")
+        show(rows)
+        print("\nTag them with:  python classify.py set transfer --like \"...\"")
+        return 0
+
+    if not args.like and not args.id:
+        print("give --like or --id")
+        return 1
+    rows = rows_matching(conn, args.like, args.id)
+    if not rows:
+        print("nothing matched")
+        return 1
+    print(f"{len(rows)} transactions:")
+    show(rows)
+
+    if args.command == "set" and args.type != "transfer":
+        # The sign says which way the money went. Money out called income
+        # would count as earned, so the type has to agree with it.
+        wrong = [r for r in rows if (r["amount"] < 0 if args.type == "income" else r["amount"] > 0)]
+        if wrong:
+            print(f"\nrefused: income is money in and expense is money out,"
+                  f" and {len(wrong)} of these rows go the other way")
+            return 1
+    if args.command == "set":
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        conn.executemany(
+            "INSERT INTO manual_type(txn_id, type, note, set_at) VALUES (?,?,?,?)"
+            " ON CONFLICT(txn_id) DO UPDATE SET type=excluded.type, note=excluded.note,"
+            " set_at=excluded.set_at",
+            [(r["id"], args.type, args.note, now) for r in rows])
+        print(f"\nmarked as {args.type}")
+    else:
+        conn.executemany("DELETE FROM manual_type WHERE txn_id = ?", [(r["id"],) for r in rows])
+        print("\ncleared, back to the automatic classification")
+
+    reconcile.reclassify(conn)
+    conn.commit()
+    total = conn.execute(
+        # Real money only: a what-if is a plan.
+        "SELECT COALESCE(SUM(CASE WHEN type='income' THEN amount END),0) i,"
+        " -COALESCE(SUM(CASE WHEN type='expense' THEN amount END),0) e FROM txn"
+        " WHERE whatif = 0").fetchone()
+    print(f"income now {money_str(total['i'])}, spending {money_str(total['e'])}")
+    conn.close()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

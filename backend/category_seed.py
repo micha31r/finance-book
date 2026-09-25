@@ -1,0 +1,100 @@
+"""Starting rules: which category a description belongs to.
+
+Each entry is (category, regular expression), matched case-insensitively against
+the raw description. A third item sets the type as well, for wording whose
+meaning the bank has already settled. Order matters: later rules win, so a
+specific rule can follow a broad one. Seeded once with `rules.py seed`; after
+that it is just rows in the `rule` table and you edit them like any other.
+
+Categories are deliberately narrow. "Eating out" hides the difference between a
+$4 coffee and a $60 dinner, and that difference is the point.
+"""
+
+SEED = [
+    # Broad fallbacks come first. Rules run in this order and the last match
+    # wins, so anything specific below can still override them.
+    ("Paying people", r"^PAYMENT TO |^ANZ (MOBILE|INTERNET) BANKING PAYMENT \d+ TO "),
+
+    # ---- food and drink ----
+    ("Groceries", r"WOOLWORTHS|WW METRO|\bCOLES\b|ALDI STORES|\bIGA\b|FOODWORKS"),
+    ("Convenience store", r"7-ELEVEN"),
+    ("Fast food", r"\bKFC\b|MCDONALDS|HUNGRY JACKS|SUBWAY|DOMINOS|GUZMAN Y GOMEZ|ZAMBRERO"),
+    ("Restaurants", r"SUSHI HUB|IPPUDO|RICE WORKSHOP|NANA'S GREEN TEA|ELJANNAH"),
+    ("Cafes", r"STARBUCKS|BOOST JUICE"),
+    ("Bubble tea and dessert", r"GONG ?CHA|SHARETEA|HEYTEA|YO-CHI|DESSERT STORY"),
+    ("Alcohol and bottle shops", r"\bBWS\b|DAN MURPHY|LIQUORLAND|FIRST CHOICE LIQUOR"
+                                 r"|VINTAGE CELLARS|BOTTLE ?O\b"),
+    ("Vending machines", r"ALTAVEND|BD ?VENDING|B D VENDING|AUSTRALIAN VENDING"),
+
+    # ---- getting around ----
+    ("Public transport", r"\bMYKI\b|DEPARTMENT OF TRANSPORT|\bDOT MYKI|TRANSPORTFORNSW"),
+    # UBER *EATS is food, not a ride. \bOLA\b, not "OLA ", which also matched
+    # the middle of "TST-HOLA MEXICO".
+    ("Taxis and rideshare", r"UBER ?\*(?!EATS)|DIDI|\bOLA\b|SHEBAH"),
+    ("Food delivery", r"UBER ?\*EATS|DOORDASH|MENULOG|DELIVEROO|HUNGRYPANDA"),
+    ("Parking", r"ONSTREET PARKING|WILSON PARKING|SECURE PARKING|CARE PARK"),
+
+    # ---- home ----
+    ("Phone and internet", r"VODAFONE|BOOST PREPAID|TELSTRA|OPTUS|AMAYSIM|BELONG"),
+
+    # ---- shopping ----
+    ("Clothing", r"UNIQLO|H&M|COTTON ON|MYER|DAVID JONES|GLUE STORE|CULTURE KINGS"),
+    ("Electronics", r"JB HI ?FI|OFFICEWORKS|APPLE STORE|MWAVE|SCORPTEC|CENTRE ?COM"),
+    ("Homewares", r"\bIKEA\b|\bKMART\b|BIG W|TARGET AUS|DAISO"),
+    ("Online shopping", r"\bETSY\b|EBAY|AMAZON MKTPLACE|ALIEXPRESS|TEMU|WISH GIFT CARD"),
+
+    # ---- health and sport ----
+    ("Pharmacy and health", r"CHEMIST WAREHOUSE|\bCWH\b|PRICELINE|HEALTHSMART|\bBUPA\b|TERRY WHITE"),
+    ("Sports", r"BADMINTON|TENNIS|BASKETBALL|SWIM|CLIMBING|BOULDER"),
+    ("Gym and fitness", r"GOODLIFE|ANYTIME FITNESS|FITNESS FIRST|F45|GYM\b"),
+    ("Personal care", r"BARBER|HAIRDRESS|\bSALON\b|NAILS"),
+
+    # ---- study ----
+    # Named in full. A bare "MONASH" matched "GUZMAN Y GOMEZ MONASH CLAYTON",
+    # which is a burrito.
+    ("Education", r"UNIVERSITY OF MELBOURN|UNI OF MELBOURNE|MELBOURNE UNIVERSITY THE"
+                  r"|\bRMIT\b|MONASH (UNIVERSITY|COLLEGE)|DEAKIN UNIVERSITY"),
+
+    # ---- subscriptions and software ----
+    ("Software and subscriptions", r"SPOTIFY|NETFLIX|APPLE\.COM/BILL|AUDIBLE|OPENAI|GOOGLE ONE"
+                                   r"|ANTHROPIC|CURSOR|FEEDLY|NAMECHEAP|NAME-CHEAP|FOLK\.APP"
+                                   r"|WISPR|MIDJOURNEY|GITHUB|NOTION|DROPBOX|ADOBE|PADDLE\.NET"),
+
+    # ---- going out ----
+    ("Entertainment", r"HOYTS|VILLAGE CINEMAS|EVENT CINEMAS|PALACE CINEMA"
+                      r"|TICKETEK|TICKETMASTER|MOSHTIX"),
+    ("Games", r"FORTRESS MELBOURNE|STEAM ?GAMES|NINTENDO|PLAYSTATION|XBOX"),
+
+    # ---- money out that is not shopping ----
+    ("Government and visas", r"VFS SERVICES|DEPT OF HOME AFFAIRS|AUSTRALIAN TAXATION|VICROADS"),
+    ("Donations", r"EVERY\.ORG|FARMKIND|RED CROSS|OXFAM|UNICEF"),
+    # Cash out of a machine is spending, not a fee. This sits before Bank fees
+    # so the separate "PLUS ATM TRANSACTION FEE" line is relabelled by it below.
+    ("Cash withdrawals", r"\bATM\b|WITHDRAWAL AT "),
+    # Only wording that names an actual fee, and only where the fee IS the
+    # transaction. "INC O/S FEE $0.91" appears inside every overseas purchase
+    # description, so matching it labelled real purchases as bank fees.
+    # "INCL OVERSEAS TRANSACTION FEE $5.67" is the same trap on the other side:
+    # ANZ prints it inside a whole overseas ATM withdrawal, so matching it moved
+    # whole withdrawals out of Cash withdrawals and into fees.
+    ("Bank fees", r"ATM TRANSACTION FEE|ACCOUNT SERVICE FEE"
+                  r"|MONTHLY ACCOUNT FEE|DISHONOUR FEE"),
+    # Withheld from interest income, or paid to a tax office. A tax, not a bank's
+    # charge, and "PAYMENT TO INLAND REVENUE" is not paying a person.
+    ("Tax", r"RESIDENT WITHHOLD TAX|AUSTRALIAN TAXATION|TRANSFER FROM ATO|INLAND REVENUE"),
+
+    # ---- money in ----
+    ("Salary", r"^PAY/SALARY FROM "),
+
+    # ---- wording that also sets the type ----
+    # Money into a term deposit and back out is a transfer, not spending or
+    # income: the deposit is still yours. Interest on it is income. Westpac
+    # names no destination on the way in, which is what separates it from
+    # "WITHDRAWAL MOBILE <ref> TFR Westpac Cho", an ordinary transfer.
+    ("Term deposit", r"^WITHDRAWAL ONLINE \d+ TFR\s*$", "transfer"),     # Westpac, money in
+    ("Term deposit", r"PRINCIPAL PAID ON .*TERM DEPOSIT", "transfer"),   # Westpac, principal back
+    ("Term deposit", r"^DETAILS ADVISED SEPARATELY\s*$", "transfer"),    # ANZ, money in
+    ("Term deposit", r"^PRINCIPAL TRANSFERRED FROM", "transfer"),        # ANZ, principal back
+    ("Interest", r"INTEREST PAID ON .*TERM DEPOSIT|^CREDIT INTEREST FROM|^CREDIT INTEREST PAID"
+                 r"|^BONUS CREDIT INTEREST PAID|^INTEREST PAID", "income"),
+]

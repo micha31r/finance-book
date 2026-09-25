@@ -1,0 +1,536 @@
+"""SQLite storage.
+
+The important property here is idempotency. Re-running the same file, or a
+file that overlaps one already loaded, must leave the database unchanged.
+That rests on the unique key for a transaction:
+
+    (account, date, amount, match_key, occurrence)
+
+match_key is the description with case, spacing and a trailing EFFECTIVE DATE
+ignored, so a statement and a CSV export of one transaction share a key. The
+occurrence counter is what makes it safe. Real statements contain genuinely
+identical transactions on the same day (four $5.00 EFTPOS charges at the same
+shop, for example), so hashing the content alone would silently merge them.
+Rows typed in on the page share the key, with occurrence counting down from -1
+(see manual_occurrence).
+"""
+import functools
+import re
+import re._parser as sre_parse
+import sqlite3
+from collections import Counter, defaultdict
+from datetime import date, datetime, timezone
+from pathlib import Path
+from re._constants import BRANCH, MAX_REPEAT, MIN_REPEAT
+
+from parsers.shared.model import RANK
+from parsers.shared.money import match_key
+
+DEFAULT_PATH = Path(__file__).parent / "finance.db"
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS bank (
+    id      INTEGER PRIMARY KEY,
+    name    TEXT NOT NULL UNIQUE
+);
+CREATE TABLE IF NOT EXISTS account (
+    id      INTEGER PRIMARY KEY,
+    bank_id INTEGER NOT NULL REFERENCES bank(id),
+    bsb     TEXT,
+    number  TEXT NOT NULL,
+    name    TEXT,
+    product TEXT,
+    UNIQUE (bank_id, number)
+);
+CREATE TABLE IF NOT EXISTS document (
+    id              INTEGER PRIMARY KEY,
+    account_id      INTEGER NOT NULL REFERENCES account(id),
+    kind            TEXT NOT NULL,
+    period_start    TEXT,
+    period_end      TEXT,
+    statement_no    INTEGER,
+    opening_balance INTEGER,
+    closing_balance INTEGER,
+    source_name     TEXT,
+    ingested_at     TEXT NOT NULL,
+    UNIQUE (account_id, kind, period_start, period_end)
+);
+CREATE TABLE IF NOT EXISTS txn (
+    id             INTEGER PRIMARY KEY,
+    account_id     INTEGER NOT NULL REFERENCES account(id),
+    document_id    INTEGER NOT NULL REFERENCES document(id),
+    occurrence     INTEGER NOT NULL,
+    date           TEXT NOT NULL,
+    effective_date TEXT,
+    description    TEXT NOT NULL,
+    match_key      TEXT NOT NULL,
+    amount         INTEGER NOT NULL,
+    balance        INTEGER,
+    type           TEXT,
+    category       TEXT,
+    counterparty   TEXT,
+    reference      TEXT,
+    provisional    INTEGER NOT NULL DEFAULT 0,
+    verified       INTEGER NOT NULL DEFAULT 0,
+    sequence       INTEGER NOT NULL DEFAULT 0,
+    -- Rows typed in on the page. whatif marks a plan: it moves no real
+    -- balance and ingest never touches it. series is the id of the first row
+    -- of a repeating plan, on every row of it. connect() adds both to a
+    -- database made before they existed.
+    whatif         INTEGER NOT NULL DEFAULT 0,
+    series         INTEGER,
+    UNIQUE (account_id, date, amount, match_key, occurrence)
+);
+CREATE TABLE IF NOT EXISTS transfer (
+    id          INTEGER PRIMARY KEY,
+    from_txn_id INTEGER NOT NULL REFERENCES txn(id) ON DELETE CASCADE,
+    to_txn_id   INTEGER NOT NULL REFERENCES txn(id) ON DELETE CASCADE,
+    method      TEXT NOT NULL,
+    confirmed   INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (from_txn_id, to_txn_id)
+);
+-- Your decision about a transaction, when the bank's wording cannot tell us.
+-- Applied after every automatic rule, so it always wins.
+CREATE TABLE IF NOT EXISTS manual_type (
+    txn_id  INTEGER PRIMARY KEY REFERENCES txn(id) ON DELETE CASCADE,
+    type    TEXT NOT NULL,
+    note    TEXT,
+    set_at  TEXT NOT NULL
+);
+-- Your category for a transaction, applied after every rule, like manual_type.
+CREATE TABLE IF NOT EXISTS manual_category (
+    txn_id   INTEGER PRIMARY KEY REFERENCES txn(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    set_at   TEXT NOT NULL
+);
+-- Labels income and spending by where it came from or went. A pattern is a
+-- regular expression matched against the description, case-insensitively.
+CREATE TABLE IF NOT EXISTS rule (
+    id         INTEGER PRIMARY KEY,
+    pattern    TEXT NOT NULL,
+    category   TEXT NOT NULL,
+    type       TEXT,          -- optional: also force income / expense / transfer
+    note       TEXT,
+    created_at TEXT NOT NULL
+);
+-- Money you hold that no statement covers: a term deposit, a Sharesies
+-- balance. Counted in net worth, never in income or spending. `kind` only
+-- decides which tab it appears under.
+CREATE TABLE IF NOT EXISTS holding (
+    id          INTEGER PRIMARY KEY,
+    kind        TEXT NOT NULL DEFAULT 'term deposit',
+    name        TEXT NOT NULL,
+    institution TEXT,
+    balance     INTEGER NOT NULL,
+    as_at       TEXT,
+    note        TEXT
+);
+CREATE INDEX IF NOT EXISTS txn_account_date ON txn(account_id, date);
+DROP INDEX IF EXISTS txn_reference;    -- no query reads it; older files carry it
+-- A leg belongs to one confirmed pair. Pairing inserts with OR IGNORE, so a
+-- second pair for a leg is dropped rather than counted twice.
+CREATE UNIQUE INDEX IF NOT EXISTS transfer_from ON transfer(from_txn_id) WHERE confirmed = 1;
+CREATE UNIQUE INDEX IF NOT EXISTS transfer_to ON transfer(to_txn_id) WHERE confirmed = 1;
+"""
+
+
+def _nodes(items):
+    """Every (op, argument) in a parsed pattern, at any depth."""
+    for op, av in items:
+        yield op, av
+        # An atomic group, (?>...), holds its body directly instead of in a tuple.
+        for part in av if isinstance(av, (tuple, list)) else [av]:
+            subs = part if isinstance(part, list) else [part]
+            for sub in subs:
+                if isinstance(sub, sre_parse.SubPattern):
+                    yield from _nodes(sub)
+
+
+def risky_pattern(pattern):
+    """Why a rule pattern could hang the app, or None when it is safe to run.
+
+    Python's re backtracks. A repeated group holding a variable-length repeat,
+    like (\\w+ ?)+, tries every way of splitting a word and never finishes on
+    an ordinary 40-character description. Alternatives that can match the same
+    text, like (a|aa)+, do the same. While it runs it holds the whole server.
+    So such a pattern is refused before it is saved, and never run.
+    """
+    try:
+        tree = sre_parse.parse(pattern)
+    except re.error as error:
+        return f"not a valid regular expression: {error}"
+    repeats = (MAX_REPEAT, MIN_REPEAT)
+    for op, av in _nodes(tree):
+        if op in repeats and av[1] > 1:
+            inside = list(_nodes(av[2]))
+            if any(o in repeats and a[0] != a[1] for o, a in inside):
+                return "a repeated group that holds another repeat, like (\\w+ ?)+, can run for hours"
+            # Which alternatives overlap is hard to tell, so all are refused. One
+            # character each, like (a|b), parses as a character class and passes.
+            if any(o == BRANCH for o, _ in inside):
+                return "a repeated group that holds alternatives, like (a|aa)+, can run for hours"
+    # Open-ended repeats, like the three in .*A.*B.*, try every way of sharing the
+    # text between them. Two are fine. Three took minutes over all descriptions.
+    # An optional character, like " ?", repeats at most once and is not counted.
+    if sum(1 for op, av in _nodes(tree) if op in repeats and av[1] > 1 and av[0] != av[1]) > 2:
+        return "more than two open-ended repeats, like .*A.*B.*, can run for minutes"
+    return None
+
+
+# ---- the rules for a field, shared by the page, the CLIs and the agent's
+# proposals, so they cannot drift apart ----
+
+TYPES = ("income", "expense", "transfer")
+
+
+def is_date(value):
+    """Whether value is a real date written YYYY-MM-DD, like 2026-09-15."""
+    try:
+        return date.fromisoformat(value).isoformat() == value
+    except (TypeError, ValueError):
+        return False
+
+
+def category_error(value):
+    """Why `value` cannot be a category, or None. Blank means none."""
+    if not isinstance(value, str):
+        return "category must be text"
+    # The analysis view joins hidden categories with ~ in its URL, so a
+    # category holding one would come back as two.
+    if "~" in value:
+        return "a category cannot contain ~"
+    if len(value.strip()) > 60:
+        return "a category is at most 60 characters"
+    return None
+
+
+def bad_cents(value):
+    """True unless `value` is an amount SQLite can store and add up.
+
+    type, not isinstance: isinstance(True, int) holds, so true would save as 1
+    cent. A hundred billion dollars is more than any account holds, and a sum
+    of amounts near SQLite's own 8-byte limit overflows the export.
+    """
+    return type(value) is not int or abs(value) > 10**13
+
+
+@functools.lru_cache(maxsize=None)
+def _rule_regex(pattern):
+    return None if risky_pattern(pattern) else re.compile(pattern, re.I)
+
+
+def regexp(pattern, text):
+    """SQLite's REGEXP. A risky pattern matches nothing instead of hanging."""
+    compiled = _rule_regex(pattern)
+    return compiled is not None and compiled.search(text or "") is not None
+
+
+# ---- one-off changes to stored data, run by connect() in this order ----
+
+
+def _strip_effective_dates(conn):
+    """Take ANZ Plus's "Effective Date dd/mm/yyyy" out of every match_key.
+
+    Only a statement prints it. So a statement's card purchases never matched
+    the Transaction List's copies of them: the list's rows were deleted and
+    inserted again instead of being upgraded in place, and any type or
+    category set on them was lost. Rows that now share a key are numbered
+    again in document order, so the unique key still holds.
+    """
+    groups = defaultdict(list)
+    for row in conn.execute("SELECT id, account_id, date, amount, match_key, occurrence"
+                            " FROM txn ORDER BY date, sequence, id"):
+        # From the stored key, not the description: a row renamed on the page
+        # keeps the bank's key.
+        key = match_key(row["match_key"])
+        groups[(row["account_id"], row["date"], row["amount"], key)].append(row)
+    for (_, _, _, key), rows in groups.items():
+        if all(row["match_key"] == key for row in rows):
+            continue
+        bank = [row for row in rows if row["occurrence"] > 0]
+        hand = [row for row in rows if row["occurrence"] < 0]
+        # Each row first takes a number beyond any the group holds, so that
+        # no step lands on a key another row of it still has. Hand rows can
+        # skip numbers, when one of three what-ifs was deleted, so the bound
+        # is the largest number, not the count.
+        beyond = max(abs(row["occurrence"]) for row in rows)
+        for side, sign in ((bank, 1), (hand, -1)):
+            for offset in (beyond, 0):
+                conn.executemany(
+                    "UPDATE txn SET match_key = ?, occurrence = ? WHERE id = ?",
+                    [(key, sign * (offset + n), row["id"]) for n, row in enumerate(side, 1)])
+
+
+def _list_ends(conn):
+    """Set each Transaction List's period_end to its last row's date.
+
+    It was the day the list was generated, which the parser no longer reads,
+    so the same list downloaded again a day later became a second document.
+    The end is part of the document's key, so two lists of one month can now
+    share one. The newer, or the one with rows, keeps every row and the other
+    goes.
+    """
+    lists = conn.execute(
+        "SELECT d.id, d.account_id, d.period_start, MAX(t.date) AS last FROM document d"
+        " JOIN txn t ON t.document_id = d.id WHERE d.kind = 'list' GROUP BY d.id ORDER BY d.id"
+    ).fetchall()
+    # Every key is freed first: a list's new end can be another's old one.
+    conn.executemany("UPDATE document SET period_end = NULL WHERE id = ?",
+                     [(doc["id"],) for doc in lists])
+    for doc in lists:
+        rival = conn.execute(
+            "SELECT id FROM document WHERE account_id = ? AND kind = 'list'"
+            " AND period_start = ? AND period_end = ?",
+            (doc["account_id"], doc["period_start"], doc["last"])).fetchone()
+        if rival:
+            conn.execute("UPDATE txn SET document_id = ? WHERE document_id = ?",
+                         (doc["id"], rival["id"]))
+            conn.execute("DELETE FROM document WHERE id = ?", (rival["id"],))
+        conn.execute("UPDATE document SET period_end = ? WHERE id = ?", (doc["last"], doc["id"]))
+
+
+def _anz_inclusive_starts(conn):
+    """Move each ANZ classic statement's start, after the first, on by a day.
+
+    ANZ prints the previous statement's closing day as the next one's start,
+    so the two overlapped by a day in the database, and verify_stored had to
+    hand a row on that day to the earlier one. The parser now stores the day
+    the period really begins, and the checks compare dates plainly.
+    """
+    conn.execute(
+        "UPDATE document SET period_start = date(period_start, '+1 day')"
+        " WHERE kind = 'statement' AND statement_no > 1 AND account_id IN"
+        " (SELECT account.id FROM account JOIN bank ON bank.id = account.bank_id"
+        "  WHERE bank.name = 'ANZ')")
+
+
+MIGRATIONS = [_strip_effective_dates, _list_ends, _anz_inclusive_starts]
+
+
+def connect(path=DEFAULT_PATH):
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    # Rules are regexes, and more than one query needs to run them.
+    conn.create_function("regexp", 2, regexp)
+    conn.executescript(SCHEMA)
+    # CREATE TABLE IF NOT EXISTS leaves an existing txn table as it was, so a
+    # database made before what-ifs gets the two columns here. SCHEMA carries
+    # them as well, so a fresh file needs no ALTER.
+    present = {row["name"] for row in conn.execute("PRAGMA table_info(txn)")}
+    for name, definition in (("whatif", "INTEGER NOT NULL DEFAULT 0"), ("series", "INTEGER")):
+        if name not in present:
+            conn.execute(f"ALTER TABLE txn ADD COLUMN {name} {definition}")
+    # A change to stored data that must happen once runs here, in order, and
+    # user_version records how many have. Nothing else runs them, so no file
+    # is changed twice and none is left behind.
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    for migrate in MIGRATIONS[version:]:
+        migrate(conn)
+    if version < len(MIGRATIONS):
+        conn.execute(f"PRAGMA user_version = {len(MIGRATIONS)}")
+        conn.commit()
+    return conn
+
+
+def last_known_balance(conn, acct_id):
+    """The newest closing balance a document states, with the day it is as at.
+
+    When a statement and a Transaction List end on the same day the statement
+    wins, because the list may predate that day's interest. Rows dated after
+    this day carry the balance on from it, and a real row typed in on the page
+    must be dated after it too: earlier, the bank's own figure already covers
+    the day. None when no document states a balance.
+    """
+    return conn.execute(
+        "SELECT closing_balance, period_end FROM document"
+        " WHERE account_id = ? AND closing_balance IS NOT NULL"
+        " ORDER BY period_end DESC, kind = 'statement' DESC LIMIT 1", (acct_id,)).fetchone()
+
+
+def account_id(conn, doc):
+    """Find or create the account, filling in details as sources supply them."""
+    bank = conn.execute("SELECT id FROM bank WHERE name = ?", (doc.bank,)).fetchone()
+    if bank is None:
+        bank_id = conn.execute("INSERT INTO bank(name) VALUES (?)", (doc.bank,)).lastrowid
+    else:
+        bank_id = bank["id"]
+    row = conn.execute("SELECT id, name, bsb, product FROM account WHERE bank_id = ? AND number = ?",
+                       (bank_id, doc.number)).fetchone()
+    if row is None:
+        return conn.execute(
+            "INSERT INTO account(bank_id, bsb, number, name, product) VALUES (?,?,?,?,?)",
+            (bank_id, doc.bsb, doc.number, doc.account_name, doc.product)).lastrowid
+    # A later file often knows more than the first one did.
+    conn.execute("UPDATE account SET name = COALESCE(?, name), bsb = COALESCE(?, bsb),"
+                 " product = COALESCE(?, product) WHERE id = ?",
+                 (doc.account_name, doc.bsb, doc.product, row["id"]))
+    return row["id"]
+
+
+def document_id(conn, acct_id, doc):
+    """Upsert the document row. Same account, kind and period means same document."""
+    start = doc.period_start.isoformat() if doc.period_start else None
+    end = doc.period_end.isoformat() if doc.period_end else None
+    existing = conn.execute(
+        "SELECT id FROM document WHERE account_id = ? AND kind = ? AND period_start IS ?"
+        " AND period_end IS ?", (acct_id, doc.kind, start, end)).fetchone()
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    if existing:
+        conn.execute("UPDATE document SET opening_balance=?, closing_balance=?, statement_no=?,"
+                     " source_name=?, ingested_at=? WHERE id=?",
+                     (doc.opening_balance, doc.closing_balance, doc.statement_no,
+                      doc.source_name, now, existing["id"]))
+        return existing["id"]
+    return conn.execute(
+        "INSERT INTO document(account_id, kind, period_start, period_end, statement_no,"
+        " opening_balance, closing_balance, source_name, ingested_at)"
+        " VALUES (?,?,?,?,?,?,?,?,?)",
+        (acct_id, doc.kind, start, end, doc.statement_no, doc.opening_balance,
+         doc.closing_balance, doc.source_name, now)).lastrowid
+
+
+def write_transactions(conn, acct_id, doc_id, doc, verified):
+    """Insert new rows, upgrade rows from weaker sources, leave the rest alone.
+
+    A statement is complete and balance-checked for its period, so it replaces
+    every provisional row dated inside it, whichever file arrives first. The
+    keys alone would miss some: a statement can word a row differently from
+    the Transaction List, and a row the list showed may never post.
+
+    Returns (inserted, upgraded, unchanged, removed).
+    """
+    counts = Counter()
+    inserted = upgraded = unchanged = 0
+    seen_ids = []
+    statements = conn.execute(
+        "SELECT period_start, period_end FROM document WHERE account_id = ? AND kind = 'statement'",
+        (acct_id,)).fetchall() if doc.provisional else []
+    for position, txn in enumerate(doc.transactions):
+        day = txn.date.isoformat()
+        key = (acct_id, day, txn.amount, match_key(txn.description))
+        counts[key] += 1
+        full = key + (counts[key],)
+        row = conn.execute(
+            "SELECT txn.id, txn.document_id, document.kind FROM txn"
+            " JOIN document ON document.id = txn.document_id"
+            " WHERE txn.account_id=? AND txn.date=? AND txn.amount=? AND txn.match_key=?"
+            " AND txn.occurrence=?", full).fetchone()
+        effective = txn.effective_date.isoformat() if txn.effective_date else None
+        if row is None and any(s["period_start"] <= day <= s["period_end"] for s in statements):
+            unchanged += 1      # a statement already has it, maybe spelled differently
+        elif row is None:
+            new_id = conn.execute(
+                "INSERT INTO txn(account_id, date, amount, match_key, occurrence, description,"
+                " document_id, effective_date, balance, counterparty, reference,"
+                " provisional, verified, type, sequence)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                full + (txn.description, doc_id, effective, txn.balance, txn.counterparty,
+                        txn.reference, int(doc.provisional), int(verified),
+                        "income" if txn.amount > 0 else "expense", position)).lastrowid
+            seen_ids.append(new_id)
+            inserted += 1
+        elif RANK[doc.kind] > RANK[row["kind"]]:
+            # A statement supersedes what a provisional listing said. COALESCE
+            # keeps what the older source knew: a CSV export outranks a report
+            # but carries no balance, and must not erase one.
+            conn.execute(
+                "UPDATE txn SET document_id=?, description=?,"
+                " effective_date=COALESCE(?, effective_date), balance=COALESCE(?, balance),"
+                " counterparty=COALESCE(?, counterparty), reference=COALESCE(?, reference),"
+                " provisional=?, verified=MAX(verified, ?), sequence=? WHERE id=?",
+                (doc_id, txn.description, effective, txn.balance, txn.counterparty,
+                 txn.reference, int(doc.provisional), int(verified), position, row["id"]))
+            seen_ids.append(row["id"])
+            upgraded += 1
+        else:
+            # Row id follows insertion order, which stops matching the
+            # statement as soon as anything is re-ingested, so position within
+            # the document is what orders two rows on the same day. Only the
+            # document that owns the row may set it: a CSV export covering the
+            # same day lists things in its own order, and would otherwise
+            # scramble what the statement printed.
+            if row["document_id"] == doc_id:
+                conn.execute("UPDATE txn SET sequence = ? WHERE id = ?", (position, row["id"]))
+            seen_ids.append(row["id"])
+            unchanged += 1
+
+    removed = 0
+    if not doc.derived_period:
+        # Re-ingesting a corrected statement drops rows it no longer lists. Only
+        # safe when the bank stated the period: an export's period comes from its
+        # own rows, so a shorter export would otherwise delete the difference.
+        placeholders = ",".join("?" * len(seen_ids))
+        sql = f"DELETE FROM txn WHERE document_id = ? AND id NOT IN ({placeholders})" \
+            if seen_ids else "DELETE FROM txn WHERE document_id = ?"
+        removed = conn.execute(sql, [doc_id, *seen_ids]).rowcount
+    if doc.kind == "statement":
+        # Rows this statement matched are no longer provisional, so any left in
+        # its period are a listing's copies or items that never posted. Their
+        # transfer links and manual types are deleted with them. Ingest pairs
+        # the new rows again by reference and amount, but a cross-bank link or
+        # a manual type has to be set again.
+        removed += conn.execute(
+            "DELETE FROM txn WHERE account_id = ? AND provisional = 1 AND date BETWEEN ? AND ?",
+            (acct_id, doc.period_start.isoformat(), doc.period_end.isoformat())).rowcount
+    if doc.closing_balance is not None and doc.period_end is not None:
+        # The bank's figure now settles the balance up to period_end, the day a
+        # real row typed in on the page had to be dated after (serve.misdated).
+        # One dated on or before it would move a balance the bank has stated,
+        # so it goes, like a listing's row when the statement arrives. A
+        # what-if stays: it moves nothing.
+        removed += conn.execute(
+            "DELETE FROM txn WHERE account_id = ? AND whatif = 0 AND date <= ?"
+            " AND document_id IN (SELECT id FROM document WHERE kind = 'manual')",
+            (acct_id, doc.period_end.isoformat())).rowcount
+    return inserted, upgraded, unchanged, removed
+
+
+def manual_document(conn, acct_id):
+    """The document that holds an account's hand-entered rows, made on first use.
+
+    It has no period and no balance: it covers no span of time and states
+    nothing about the account, so last_known_balance never picks it. The
+    unique index treats its NULL periods as distinct, so it is looked up
+    before it is inserted. It stays once its rows are gone; empty, it is
+    harmless.
+    """
+    row = conn.execute("SELECT id FROM document WHERE account_id = ? AND kind = 'manual'",
+                       (acct_id,)).fetchone()
+    if row:
+        return row["id"]
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return conn.execute(
+        "INSERT INTO document(account_id, kind, source_name, ingested_at)"
+        " VALUES (?, 'manual', 'entered by hand', ?)", (acct_id, now)).lastrowid
+
+
+def manual_occurrence(conn, acct_id, day, amount, key):
+    """The next occurrence for a hand-entered row with this key.
+
+    Bank rows count up from 1, hand rows down from -1, so the two never meet:
+    ingest's lookup never finds a hand row, two identical what-ifs on one day
+    both insert, and the statement that later lists a real one inserts its
+    own row instead of failing on the key.
+    """
+    return conn.execute(
+        "SELECT COALESCE(MIN(occurrence), 0) - 1 FROM txn WHERE account_id = ? AND date = ?"
+        " AND amount = ? AND match_key = ? AND occurrence < 0",
+        (acct_id, day, amount, key)).fetchone()[0]
+
+
+def add_manual(conn, acct_id, day, description, amount, whatif):
+    """Insert one row typed in on the page. Returns its id.
+
+    A real row is provisional, like a Transaction List's: the statement for
+    that period replaces it. A what-if is not, so ingest never touches it.
+    sequence 1000000 lists it after any bank row on the same day.
+    """
+    key = match_key(description)
+    return conn.execute(
+        "INSERT INTO txn(account_id, document_id, date, amount, match_key, occurrence,"
+        " description, type, provisional, whatif, sequence)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,1000000)",
+        (acct_id, manual_document(conn, acct_id), day, amount, key,
+         manual_occurrence(conn, acct_id, day, amount, key), description,
+         "income" if amount > 0 else "expense", int(not whatif), int(whatif))).lastrowid

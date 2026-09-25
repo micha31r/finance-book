@@ -1,0 +1,5 @@
+pymupdf==1.28.2
+
+# The analysis agent behind the page's chat bar. Everything else runs without it.
+# It drives the `claude` CLI you already have, so no API key is needed.
+claude-agent-sdk==0.2.152
