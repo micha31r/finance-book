@@ -2254,8 +2254,6 @@ function overviewBody(rows, ranked, spent, days, listed, {income, deposits, net}
     </tr>`;
   }).join("");
   const allOn = analysis.hidden.size === 0;
-  // From the full list, so ticking Uncategorised off does not read "all labelled".
-  const unlabelled = listed.find(([name]) => name === "Uncategorised");
 
   // The share of income kept, said plainly in either direction. Percentages of
   // nothing mean nothing, so a period with no income says so instead.
@@ -2287,10 +2285,6 @@ function overviewBody(rows, ranked, spent, days, listed, {income, deposits, net}
       <div class="card"><div class="caption">Per month</div>
         <div class="v num">${money(Math.round(spent / days * 30.44))}</div>
         <div class="note">average</div></div>
-      <div class="card"><div class="caption">Categories</div>
-        <div class="v num">${ranked.length}</div>
-        <div class="note">${unlabelled
-            ? money(unlabelled[1].total) + " unlabelled" : "all labelled"}</div></div>
     </div>
 
     <div class="charts">
