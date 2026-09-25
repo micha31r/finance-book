@@ -71,3 +71,7 @@ the bank's row beside yours instead, so delete yours then.
 
 Statements, the database and the exported JSON are all gitignored. Nothing with
 your name or account numbers in it is tracked.
+
+To demo the page, copy `backend/finance.db` somewhere safe, then run
+`backend/scramble.py`. It replaces every amount and account number with a
+random one and keeps everything else. Put the copy back afterwards.

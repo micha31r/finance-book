@@ -13,6 +13,7 @@ Loads bank statements and exports into `finance.db`. Run from this folder.
 ../.venv/bin/python rules.py todo           # merchants no rule matches yet
 ../.venv/bin/python rules.py test "PATTERN" # preview before adding
 ../.venv/bin/python rules.py add Sports "BADMINTON|TENNIS"
+../.venv/bin/python scramble.py             # random numbers for a demo, for good
 ```
 
 `SCHEMA.md` documents the database and how to read it without
@@ -132,5 +133,6 @@ Stored as signed integer cents. Negative is money out. No floats anywhere.
 | `agent.py` | the chat agent: read-only queries, page moves, proposed changes |
 | `db.py` | schema, migrations and idempotent writes |
 | `reconcile.py` | the checks, balance anchors, transfer matching |
+| `scramble.py` | replace every amount and account number at random, for a demo |
 | `parsers/shared/` | PDF geometry, CSV reading, money and dates |
 | `parsers/{anzplus,anz,westpac}.py` | one per bank |
