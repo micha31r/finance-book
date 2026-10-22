@@ -20,7 +20,7 @@ holding   (standalone: money no statement covers)
 | column | type | notes |
 |---|---|---|
 | id | INTEGER | primary key |
-| name | TEXT | `ANZ Plus`, `ANZ`, `Westpac`. Unique. |
+| name | TEXT | `ANZ Plus`, `ANZ`, `Westpac`, `Up`. Unique. |
 
 `ANZ Plus` and `ANZ` are different banks here. They are separate products with
 separate statements and separate account numbers.
