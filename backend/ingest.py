@@ -21,10 +21,11 @@ from pathlib import Path
 
 import db
 import reconcile
-from parsers import anz, anzplus, westpac
+from parsers import anz, anzplus, up, westpac
 from parsers.shared.money import match_key, money_str
 
-PARSERS = [anzplus, anz, westpac]
+# Up before ANZ: ANZ's detect matches loose wording that an Up page could hold.
+PARSERS = [anzplus, up, anz, westpac]
 
 
 # An overlap match needs real evidence before it skips the prompt. Two

@@ -35,9 +35,16 @@ file. The page's Upload button asks with a list of your ANZ accounts.
 | ANZ Plus | Account Statement PDF, Transaction List PDF |
 | ANZ | Statement PDF, Transaction Report PDF, CSV export |
 | Westpac | data export CSV, ACCOUNTS CSV |
+| Up | monthly Statement PDF, Interim Statement PDF |
 
 Westpac's `PAYMENTS` file is recognised and skipped. Every transaction in it is
 already in the data export.
+
+An Up Interim Statement covers the month so far and includes pending rows. It
+is loaded like a Transaction List, so the full statement replaces it later.
+Two interims of the same month do not replace each other. A pending row that
+settles at a different amount is then counted twice until the full statement
+arrives.
 
 ## Checks that reject a file
 
@@ -137,4 +144,4 @@ Stored as signed integer cents. Negative is money out. No floats anywhere.
 | `reconcile.py` | the checks, balance anchors, transfer matching |
 | `scramble.py` | replace every amount and account number at random, for a demo |
 | `parsers/shared/` | PDF geometry, CSV reading, money and dates |
-| `parsers/{anzplus,anz,westpac}.py` | one per bank |
+| `parsers/{anzplus,anz,westpac,up}.py` | one per bank |
